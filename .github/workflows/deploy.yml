@@ -25,6 +25,7 @@ jobs:
           persist-credentials: false
       - name: Install and Build
         run: |
+          cd docs
           npm install
           npx honkit build
       - name: Upload artifact
