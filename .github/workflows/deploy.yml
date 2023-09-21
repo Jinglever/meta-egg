@@ -28,7 +28,7 @@ jobs:
           cd docs
           npm install
           npx honkit build
-          echo "meta-egg.jinglever.com" > docs/_book/CNAME
+          echo "meta-egg.jinglever.com" > _book/CNAME
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
