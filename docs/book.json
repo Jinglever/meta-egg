@@ -1,11 +1,11 @@
 {
     "title": "meta-egg docs",
     "plugins": [
-        "-toggle-chapters",
+        "toggle-chapters",
         "back-to-top-button",
         "-multipart",
         "-splitter",
         "flexible-alerts",
-        "-pageview-count"
+        "pageview-count"
     ]
 }

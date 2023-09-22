@@ -13,6 +13,7 @@
     "honkit": "^5.1.0"
   },
   "dependencies": {
+    "ebook-convert": "^2.0.1",
     "gitbook-plugin-back-to-top-button": "^0.1.4",
     "gitbook-plugin-chapter-fold": "0.0.4",
     "gitbook-plugin-flexible-alerts": "^1.0.4",
