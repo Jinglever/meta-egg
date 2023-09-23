@@ -1,11 +1,25 @@
 {
     "title": "meta-egg docs",
+    "description": "user manual for meta-egg",
     "plugins": [
-        "toggle-chapters",
-        "back-to-top-button",
-        "-multipart",
-        "-splitter",
-        "flexible-alerts",
-        "pageview-count"
-    ]
+        "-honkit-plugin-toggle-chapters",
+        "alertarea",
+        "honkit-plugin-markdown-tabs",
+        "todo",
+        "sitemap",
+        "@henry781/honkit-plugin-twemoji",
+        "anchors@https://github.com/chick-p/honkit-plugin-anchors.git",
+        "@dogatana/back-to-top-button",
+        "-lunr",
+        "-search",
+        "-search-plus",
+        "-theme-default",
+        "-fontsettings",
+        "@honkit/honkit-plugin-theme"
+    ],
+    "pluginsConfig": {
+        "sitemap": {
+            "url": "https://meta-egg.jinglever.com/"
+        }
+    }
 }

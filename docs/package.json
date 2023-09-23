@@ -10,9 +10,16 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "honkit": "^5.1.0"
+    "honkit": "^5.1.0",
+    "honkit-plugin-theme-osiris": "^1.0.3",
+    "honkit-plugin-todo": "^1.0.0"
   },
   "dependencies": {
+    "@dogatana/honkit-plugin-back-to-top-button": "^1.0.0",
+    "@dogatana/honkit-plugin-theme-default-fa5": "^1.0.6",
+    "@henry781/honkit-plugin-twemoji": "^1.0.0",
+    "@honkit/honkit-plugin-theme": "^5.1.0",
+    "anchors": "git+https://github.com/chick-p/honkit-plugin-anchors.git",
     "ebook-convert": "^2.0.1",
     "gitbook-plugin-back-to-top-button": "^0.1.4",
     "gitbook-plugin-chapter-fold": "0.0.4",
@@ -20,6 +27,18 @@
     "gitbook-plugin-multipart": "^0.3.0",
     "gitbook-plugin-pageview-count": "^1.0.1",
     "gitbook-plugin-splitter": "0.0.8",
-    "gitbook-plugin-toggle-chapters": "0.0.3"
+    "gitbook-plugin-toggle-chapters": "0.0.3",
+    "honkit-plugin-alertarea": "^0.1.0",
+    "honkit-plugin-breadcrumbs": "0.0.2",
+    "honkit-plugin-encode-link": "0.0.1",
+    "honkit-plugin-i18nsettings": "^1.0.0",
+    "honkit-plugin-markdown-tabs": "0.0.1",
+    "honkit-plugin-mermaid": "^0.1.4",
+    "honkit-plugin-natural-linebreak": "^0.1.0",
+    "honkit-plugin-search-plus": "^1.0.0",
+    "honkit-plugin-shiki": "^1.0.1",
+    "honkit-plugin-sitemap": "^1.0.2",
+    "honkit-plugin-theme-darkening": "^1.0.3",
+    "honkit-plugin-toggle-chapters": "0.0.1"
   }
 }

@@ -1,4 +1,4 @@
-# 对象转换规范(VO ↔ BO ↔ Model)
+# 对象转换规范(VO <-> BO <-> Model)
 
 框架给出的代码示例里，分别在handler、biz定义了VO（view object）和BO（business object），它们存在的意义是作为胶水层将不同层之间的数据结构解耦，提高代码的可扩展性。它们的代码示例分别如下：
 
