@@ -4,10 +4,9 @@
     * [设计理念](introduction/design_concept.md)
     * [适用边界](introduction/boundary.md)
     * [项目生态](introduction/ecology.md)
-    * 框架结构
-        * [架构](introduction/framework.md)
-        * [分层结构](introduction/layer.md)
-        * [目录结构](introduction/directories.md)
+    * [框架结构](introduction/framework.md)
+    * [分层结构](introduction/layer.md)
+    * [目录结构](introduction/directories.md)
 * [快速开始](quick_start/readme.md)
     * [工程初始化](quick_start/init_project.md)
     * [工程迭代](quick_start/update_project.md)
