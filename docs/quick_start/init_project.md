@@ -68,7 +68,7 @@ Project generated successfully
     ```bash
     cp _manifest/env.yml _manifest/env-local.yml
     
-    cp configs/conf.yml configs/conf-local.yml
+    cp configs/<project-name>.yml configs/<project-name>-local.yml
     ```
     
 6. 假设前面选择了需要数据库，并且需要demo数据库表，那么接下来准备数据库服务

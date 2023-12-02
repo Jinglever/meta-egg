@@ -2,7 +2,7 @@
 
 框架把“配置”划分了三大类别：基础设施类，业务约束类，资源类。
 
-对照 `configs/conf.yml` 理解这几大分类：
+对照 `configs/<project-name>.yml` 理解这几大分类：
 
 - 基础设施类：如 `log` ， `http_server` ， `grpc_server` ， `monitor_server` 都属于基础设施类。它们可以认为是业务无关的配置，更偏向于系统的基础支撑。
 - 业务约束类：在 `constraint` 下面可以放置与业务相关的配置，如：cron定时任务规则，是否开启上报等。
