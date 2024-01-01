@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE project SYSTEM "meta_egg.dtd">
 
-<project name="demo" desc="示例" go_module="gitlab.jinglever.com/xx/xx" go_version="1.19"
+<project name="demo" desc="示例" go_module="github.com/xx/xx" go_version="1.19"
     server_type="ALL" no_auth="false">
     <database name="demo" type="MySQL" charset="utf8mb4">
         <!-- 用户 -->
@@ -9,7 +9,7 @@
             <column name="id" type="_ID" />
             <column name="name" type="VARCHAR" length="64" comment="用户名" />
             <column name="gender" type="_FID" required="true" comment="性别">
-                <foreign_key table="gender" />
+                <foreign_key table="mt_gender" />
             </column>
             <column name="title" type="CHAR" length="8" required="true" comment="职位" />
             <column name="salary" type="DECIMAL" unsigned="true" length="16" decimal="2"
@@ -36,7 +36,7 @@
             </unique>
         </table>
         <!-- 性别 -->
-        <table name="gender" type="META" comment="性别">
+        <table name="mt_gender" type="META" comment="性别">
             <column name="id" type="_ID" />
             <column name="semantic" type="_SMT" length="8" required="true" comment="语义" />
             <column name="desc" type="VARCHAR" length="64" required="false" comment="描述" />
