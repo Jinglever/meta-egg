@@ -15,3 +15,9 @@
 # vendor/
 
 ._.DS_Store
+
+test/_data/conf.yml
+test/_data/*.sql
+test/_data/*.txt
+build/bin/*
+.DS_Store

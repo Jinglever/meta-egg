@@ -3,6 +3,8 @@
 # meta-egg
 Awesome Tools to Generate MetaEgg Framework, which is a Concise Framework For Golang.
 
+Officially Open Source Now! - 2024/01/01 which is **元旦节** in China, and our meta-egg is **元蛋** in Chinese. 😁
+
 # User Guide
 https://meta-egg.jinglever.com/
 
@@ -62,3 +64,9 @@ and put it in your $PATH.
 ├── sql  --------------------------  工程的sql文件
 └── third_party  ------------------  第三方服务包
 ```
+
+### 版权声明
+This project is licensed under the GPL-3.0 license, the full text of which can be found in the LICENSE file. You may use, copy, modify, and derive works from this project, but you are not allowed to distribute it as patented software or sell it commercially based on this project's licensing agreement.
+
+本项目使用 [GPL-3.0](LICENSE) 协议，完整协议内容见 [LICENSE](LICENSE) 文件。
+你可以对本项目进行使用、复制、修改、衍生，但不允许发布为专利授权的软件或以本项目授权协议为基础进行商业销售等。

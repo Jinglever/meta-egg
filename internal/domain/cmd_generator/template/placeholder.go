@@ -1,0 +1,15 @@
+package template
+
+const (
+	PH_GO_MODULE               = "%%GO-MODULE%%"
+	PH_GO_VERSION              = "%%GO-VERSION%%"
+	PH_ENV_PREFIX              = "%%ENV-PREFIX%%"
+	PH_PROJECT_NAME            = "%%PROJECT-NAME%%"
+	PH_PROJECT_NAME_DIR        = "%%PROJECT-NAME-DIR%%"    // 适用于目录名
+	PH_PROJECT_NAME_PKG        = "%%PROJECT-NAME-PKG%%"    // 适用于包名
+	PH_PROJECT_NAME_STRUCT     = "%%PROJECT-NAME-STRUCT%%" // 适用于结构体名
+	PH_MAIN_RUN_HTTP_SERVER    = "%%MAIN-RUN-HTTP-SERVER%%"
+	PH_MAIN_RUN_GRPC_SERVER    = "%%MAIN-RUN-GRPC-SERVER%%"
+	PH_MAIN_CANCEL_HTTP_SERVER = "%%MAIN-CANCEL-HTTP-SERVER%%"
+	PH_MAIN_CANCEL_GRPC_SERVER = "%%MAIN-CANCEL-GRPC-SERVER%%"
+)

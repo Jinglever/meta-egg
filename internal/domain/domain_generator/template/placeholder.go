@@ -1,0 +1,13 @@
+package template
+
+const (
+	// basic
+	PH_GO_MODULE           = "%%GO-MODULE%%"
+	PH_USECASE_DESC        = "%%USECASE-DESC%%"
+	PH_USECASE_NAME_PKG    = "%%USECASE-NAME-PKG%%"
+	PH_USECASE_NAME_STRUCT = "%%USECASE-NAME-STRUCT%%"
+
+	// dynamic generate
+	PH_IMPORT_USECASE_LIST   = "%%IMPORT-USECASE-LIST%%"
+	PH_PROVIDER_USECASE_LIST = "%%PROVIDER-USECASE-LIST%%"
+)
