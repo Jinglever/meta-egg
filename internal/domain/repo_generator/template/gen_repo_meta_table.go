@@ -18,6 +18,7 @@ import (
 
 type %%TABLE-NAME-STRUCT%%Repo interface {
 	GetTX(ctx context.Context) *gorm.DB
+	GetIDBySemantic(smt string) uint64
 	GetSemanticByID(id uint64) string
 	Gets(ctx context.Context, opts ...gormx.Option) ([]*model.%%TABLE-NAME-STRUCT%%, error)
 	GetByID(ctx context.Context, id uint64, opts ...gormx.Option) (*model.%%TABLE-NAME-STRUCT%%, error)
@@ -33,6 +34,13 @@ type %%TABLE-NAME-STRUCT%%RepoImpl struct {
 func (s *%%TABLE-NAME-STRUCT%%RepoImpl) GetTX(ctx context.Context) *gorm.DB {
 	// in case of transaction
 	return s.Resource.DB.GetTX(ctx)
+}
+
+func (s *%%TABLE-NAME-STRUCT%%RepoImpl) GetIDBySemantic(smt string) uint64 {
+	switch smt {%%CASE-META-SEMANTIC-TO-ID%%
+	default:
+		return 0
+	}
 }
 
 func (s *%%TABLE-NAME-STRUCT%%RepoImpl) GetSemanticByID(id uint64) string {

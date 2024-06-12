@@ -169,6 +169,7 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 			log.Errorf("get meta records failed: %v", err)
 			return err
 		}
+		genCaseMetaSemanticToID(code, table, eCols, metaRecords)
 		genCaseMetaIDToSemantic(code, table, eCols, metaRecords)
 	}
 
@@ -188,6 +189,23 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	}
 
 	return nil
+}
+
+func genCaseMetaSemanticToID(code *string, table *model.Table, eCols *helper.ExtTypeCols, metaRecords []map[string]interface{}) {
+	if len(metaRecords) == 0 {
+		*code = strings.ReplaceAll(*code, template.PH_CASE_META_SEMANTIC_TO_ID, "")
+	} else {
+		var buf strings.Builder
+		// case meta id to semantic
+		for _, record := range metaRecords {
+			buf.WriteString(fmt.Sprintf("\ncase \"%s\":\n		return model.Meta%s%s",
+				strings.TrimSpace(record[eCols.Semantic.Name].(string)),
+				helper.GetStructName(table.Name),
+				helper.GetTableColName(record[eCols.Semantic.Name].(string)),
+			))
+		}
+		*code = strings.ReplaceAll(*code, template.PH_CASE_META_SEMANTIC_TO_ID, buf.String())
+	}
 }
 
 func genCaseMetaIDToSemantic(code *string, table *model.Table, eCols *helper.ExtTypeCols, metaRecords []map[string]interface{}) {
