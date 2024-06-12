@@ -1,4 +1,7 @@
 > before 2024-01-01
+- [x] add GetIDBySemantic() into gen/repo for meta table
+
+> before 2024-01-01
 - [x] fix meta sql generation bug
 - [x] ready for open source
 
