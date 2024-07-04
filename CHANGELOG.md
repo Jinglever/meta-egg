@@ -1,3 +1,8 @@
+
+
+> before 2024-07-04
+- [x] add new column type "_TIME_DELETE2", support using timestamp as deleted_at
+
 > before 2024-01-01
 - [x] add GetIDBySemantic() into gen/repo for meta table
 

@@ -52,7 +52,7 @@ func newProject(c *cli.Context) error {
 	// ask for go version
 	proj.GoVersion = jgcmd.AskForInput(
 		"Please input go version",
-		"1.19",
+		"1.20",
 	)
 	// ask for server type
 	proj.ServerType = model.ServerType(jgcmd.AskForOption(

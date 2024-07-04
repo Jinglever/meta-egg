@@ -82,6 +82,11 @@ func generateForTable(path string, table *model.Table, dbOper repo.DBOperator) e
 			imports["gorm.io/gorm"] = true
 			buf.WriteString(fmt.Sprintf("	 %s %s `gorm:\"column:%s\"` // %s", helper.GetTableColName(column.Name), typ, column.Name, column.Comment))
 			continue
+		} else if column.ExtType == model.ColumnExtType_TIME_DELETE2 {
+			typ := "soft_delete.DeletedAt"
+			imports["gorm.io/plugin/soft_delete"] = true
+			buf.WriteString(fmt.Sprintf("	 %s %s `gorm:\"column:%s\"` // %s", helper.GetTableColName(column.Name), typ, column.Name, column.Comment))
+			continue
 		}
 
 		typ, err := helper.GetGoType(column)

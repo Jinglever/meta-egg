@@ -69,18 +69,19 @@ var (
 	ColumnType_BYTEA       ColumnType = "BYTEA"
 
 	// 自定义字段扩展类型
-	ColumnExtType_ID          ColumnExtType = "_ID"          // 默认的表主键类型 bigint(20, unsigned) primary auto_increment not null
-	ColumnExtType_FID         ColumnExtType = "_FID"         // 默认的外链类型 bigint(20, unsigned)
-	ColumnExtType_BOOL        ColumnExtType = "_BOOL"        // 布尔类型 tinyint(1)
-	ColumnExtType_SMT         ColumnExtType = "_SMT"         // META表的语义字段 CHAR(16)，可自定义长度
-	ColumnExtType_SMT2        ColumnExtType = "_SMT2"        // META表的语义字段 VARCHAR(16)，可自定义长度
-	ColumnExtType_DESC        ColumnExtType = "_DESC"        // META表的描述字段 VARCHAR(128)，可自定义长度
-	ColumnExtType_ME_CREATE   ColumnExtType = "_ME_CREATE"   // 创建者
-	ColumnExtType_ME_UPDATE   ColumnExtType = "_ME_UPDATE"   // 更新者
-	ColumnExtType_ME_DELETE   ColumnExtType = "_ME_DELETE"   // 删除者
-	ColumnExtType_TIME_CREATE ColumnExtType = "_TIME_CREATE" // 创建时间
-	ColumnExtType_TIME_UPDATE ColumnExtType = "_TIME_UPDATE" // 更新时间
-	ColumnExtType_TIME_DELETE ColumnExtType = "_TIME_DELETE" // 删除时间，NULL代表未删除
+	ColumnExtType_ID           ColumnExtType = "_ID"           // 默认的表主键类型 bigint(20, unsigned) primary auto_increment not null
+	ColumnExtType_FID          ColumnExtType = "_FID"          // 默认的外链类型 bigint(20, unsigned)
+	ColumnExtType_BOOL         ColumnExtType = "_BOOL"         // 布尔类型 tinyint(1)
+	ColumnExtType_SMT          ColumnExtType = "_SMT"          // META表的语义字段 CHAR(16)，可自定义长度
+	ColumnExtType_SMT2         ColumnExtType = "_SMT2"         // META表的语义字段 VARCHAR(16)，可自定义长度
+	ColumnExtType_DESC         ColumnExtType = "_DESC"         // META表的描述字段 VARCHAR(128)，可自定义长度
+	ColumnExtType_ME_CREATE    ColumnExtType = "_ME_CREATE"    // 创建者
+	ColumnExtType_ME_UPDATE    ColumnExtType = "_ME_UPDATE"    // 更新者
+	ColumnExtType_ME_DELETE    ColumnExtType = "_ME_DELETE"    // 删除者
+	ColumnExtType_TIME_CREATE  ColumnExtType = "_TIME_CREATE"  // 创建时间
+	ColumnExtType_TIME_UPDATE  ColumnExtType = "_TIME_UPDATE"  // 更新时间
+	ColumnExtType_TIME_DELETE  ColumnExtType = "_TIME_DELETE"  // 删除时间，NULL代表未删除
+	ColumnExtType_TIME_DELETE2 ColumnExtType = "_TIME_DELETE2" // 删除时间，0代表未删除
 )
 
 var AvailableColumnTypes = map[ColumnType]bool{
@@ -114,18 +115,19 @@ var AvailableColumnTypes = map[ColumnType]bool{
 }
 
 var ColumnExtTypeToColumnType = map[ColumnExtType]ColumnType{
-	ColumnExtType_ID:          ColumnType_BIGINT,
-	ColumnExtType_FID:         ColumnType_BIGINT,
-	ColumnExtType_BOOL:        ColumnType_BOOL,
-	ColumnExtType_SMT:         ColumnType_CHAR,
-	ColumnExtType_SMT2:        ColumnType_VARCHAR,
-	ColumnExtType_DESC:        ColumnType_VARCHAR,
-	ColumnExtType_ME_CREATE:   ColumnType_BIGINT,
-	ColumnExtType_ME_UPDATE:   ColumnType_BIGINT,
-	ColumnExtType_ME_DELETE:   ColumnType_BIGINT,
-	ColumnExtType_TIME_CREATE: ColumnType_DATETIME,
-	ColumnExtType_TIME_UPDATE: ColumnType_DATETIME,
-	ColumnExtType_TIME_DELETE: ColumnType_DATETIME,
+	ColumnExtType_ID:           ColumnType_BIGINT,
+	ColumnExtType_FID:          ColumnType_BIGINT,
+	ColumnExtType_BOOL:         ColumnType_BOOL,
+	ColumnExtType_SMT:          ColumnType_CHAR,
+	ColumnExtType_SMT2:         ColumnType_VARCHAR,
+	ColumnExtType_DESC:         ColumnType_VARCHAR,
+	ColumnExtType_ME_CREATE:    ColumnType_BIGINT,
+	ColumnExtType_ME_UPDATE:    ColumnType_BIGINT,
+	ColumnExtType_ME_DELETE:    ColumnType_BIGINT,
+	ColumnExtType_TIME_CREATE:  ColumnType_DATETIME,
+	ColumnExtType_TIME_UPDATE:  ColumnType_DATETIME,
+	ColumnExtType_TIME_DELETE:  ColumnType_DATETIME,
+	ColumnExtType_TIME_DELETE2: ColumnType_BIGINT,
 }
 
 var IntegerColumnTypes = map[ColumnType]bool{

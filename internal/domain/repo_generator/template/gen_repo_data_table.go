@@ -24,7 +24,7 @@ var TplSoftDeleteWithDeletedBy string = `var result *gorm.DB
 	if me, ok := contexts.GetME(ctx); ok {
 		result = tx.UpdateColumns(map[string]interface{}{
 			model.Col%%TABLE-NAME-STRUCT%%%%COL-DELETED-BY%%: &(me.ID),
-			model.Col%%TABLE-NAME-STRUCT%%%%COL-DELETED-AT%%: time.Now(),
+			model.Col%%TABLE-NAME-STRUCT%%%%COL-DELETED-AT%%: %%VAL-DELETED-AT%%,
 		})
 	} else {
 		result = tx.Delete(&model.%%TABLE-NAME-STRUCT%%{})

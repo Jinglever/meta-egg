@@ -27,6 +27,8 @@ func GetExtTypeCols(table *model.Table) *ExtTypeCols {
 			extTypeCols.DeletedBy = col
 		} else if col.ExtType == model.ColumnExtType_TIME_DELETE {
 			extTypeCols.DeletedAt = col
+		} else if col.ExtType == model.ColumnExtType_TIME_DELETE2 {
+			extTypeCols.DeletedAt = col
 		} else if col.ExtType == model.ColumnExtType_SMT {
 			extTypeCols.Semantic = col
 		} else if col.ExtType == model.ColumnExtType_SMT2 {

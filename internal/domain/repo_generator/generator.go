@@ -186,6 +186,11 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	}
 	if eCols.DeletedAt != nil {
 		*code = strings.ReplaceAll(*code, template.PH_COL_DELETED_AT, helper.GetTableColName(eCols.DeletedAt.Name))
+		if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE {
+			*code = strings.ReplaceAll(*code, template.PH_VAL_DELETED_AT, "time.Now()")
+		} else if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE2 {
+			*code = strings.ReplaceAll(*code, template.PH_VAL_DELETED_AT, "time.Now().Unix()")
+		}
 	}
 
 	return nil

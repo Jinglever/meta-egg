@@ -22,7 +22,7 @@ var TplManifestTableDemo = `
             <column name="deleted_by" type="_ME_DELETE" comment="删除者">
                 <foreign_key table="user" />
             </column>
-            <column name="deleted_at" type="_TIME_DELETE" comment="删除时间" />
+            <column name="deleted_at" type="_TIME_DELETE2" comment="删除时间" />
 
             <index>
                 <index_column name="is_on_job" />
@@ -34,7 +34,7 @@ var TplManifestTableDemo = `
             <column name="id" type="_ID" />
             <column name="semantic" type="_SMT2" length="8" required="true" comment="语义" />
             <column name="desc" type="_DESC" length="64" required="false" comment="描述" />
-            <column name="deleted_at" type="_TIME_DELETE" comment="删除时间" />
+            <column name="deleted_at" type="_TIME_DELETE2" comment="删除时间" />
         </table>
 `
 

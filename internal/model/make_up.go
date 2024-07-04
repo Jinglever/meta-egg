@@ -175,6 +175,12 @@ func (c *Column) MakeUp(t *Table) {
 			c.IsRequired = false
 			c.IsIndex = true
 			c.IsHidden = true
+		case ColumnExtType_TIME_DELETE2:
+			c.IsRequired = true
+			c.IsIndex = true
+			c.IsHidden = true
+			c.InsertDefault = "0"
+			c.IsUnsigned = true
 		}
 
 		if c.Table.Database.Type == DBType_PG {
