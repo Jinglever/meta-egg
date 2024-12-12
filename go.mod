@@ -7,7 +7,7 @@ require (
 	github.com/Jinglever/go-config v0.9.3
 	github.com/Jinglever/go-file v0.9.2
 	github.com/Jinglever/go-mysql v0.9.2
-	github.com/Jinglever/go-postgres v1.0.1
+	github.com/Jinglever/go-postgres v1.0.2
 	github.com/Jinglever/go-string v0.9.3
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/gobwas/glob v0.2.3
@@ -15,7 +15,7 @@ require (
 	github.com/urfave/cli/v2 v2.24.4
 	gorm.io/driver/mysql v1.4.7
 	gorm.io/driver/postgres v1.5.0
-	gorm.io/gorm v1.25.5
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -41,12 +41,12 @@ require (
 	github.com/spf13/viper v1.14.0 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	golang.org/x/crypto v0.22.0 // indirect
-	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.6.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
