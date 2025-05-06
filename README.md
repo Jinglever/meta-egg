@@ -38,6 +38,27 @@ brew install meta-egg
 Download the latest binary from [GitHub Releases](https://github.com/Jinglever/meta-egg/releases),  
 and put it in your `$PATH`.
 
+# Uninstall
+
+## Linux
+
+```bash
+sudo rm -f /usr/local/bin/meta-egg
+```
+
+## Windows
+
+```powershell
+Remove-Item "$HOME\.meta-egg\bin\meta-egg.exe"
+# 如需移除 PATH，可在"系统环境变量"中手动删除 $HOME\.meta-egg\bin
+```
+
+## Homebrew
+
+```bash
+brew uninstall meta-egg
+```
+
 # CLI Usage
 
 ```bash
