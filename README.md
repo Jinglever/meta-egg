@@ -1,4 +1,4 @@
-<div align="center"><img src="https://github.com/Jinglever/meta-egg/blob/master/logo.png" width="200" height="200"></div>
+<div align="center"><img src="https://raw.githubusercontent.com/Jinglever/meta-egg/refs/heads/master/logo.png" width="200" height="200"></div>
 
 # meta-egg
 Awesome Tools to Generate MetaEgg Framework, which is a Concise Framework For Golang.
@@ -79,7 +79,7 @@ meta-egg help template
 ```
 
 # Framework Structure
-![架构图](docs/images/framework.png)
+![架构图](https://raw.githubusercontent.com/Jinglever/meta-egg-doc/refs/heads/master/.gitbook/assets/framework.png)
 
 # Directory Structure
 ```bash
