@@ -44,7 +44,6 @@ jobs:
           LDFLAGS="$LDFLAGS -X \"${GOMODULE}/pkg/version.Debug=${DEBUG}\""
           GO_LDFLAGS="-s -w"
           GO_TRIMPATH="-trimpath"
-          cd meta-egg
           if [ "${{ matrix.goos }}" = "windows" ]; then
             go build -ldflags "${GO_LDFLAGS} ${LDFLAGS}" ${GO_TRIMPATH} -o meta-egg.exe ./cmd/meta-egg/
           else
@@ -63,7 +62,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            meta-egg/meta-egg-*.zip
-            meta-egg/meta-egg-*.tar.gz
+            meta-egg-*.zip
+            meta-egg-*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
