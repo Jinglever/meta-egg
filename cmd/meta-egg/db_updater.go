@@ -13,25 +13,25 @@ import (
 
 	jgfile "github.com/Jinglever/go-file"
 	jgstr "github.com/Jinglever/go-string"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-func generateDBSQL(c *cli.Context) error {
+func generateDBSQL(cmd *cobra.Command) error {
 	var err error
-	checkDebugMode(c)
-	cfg := loadEnvConfig(c)
+	checkDebugMode(cmd)
+	cfg := loadEnvConfig(cmd)
 
 	// parse xml file
 	m, err := modeler.ParseXMLFile(cfg.Manifest.File)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
 		return err
 	}
 
 	// create sql dir if not exist
 	sqlRoot := filepath.Join(cfg.Manifest.Root, "sql")
 	if err = os.MkdirAll(sqlRoot, 0755); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to create sql dir, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create sql dir, err: %v\n", err)))
 		return err
 	}
 
@@ -49,7 +49,7 @@ func generateDBSQL(c *cli.Context) error {
 			DBName:   dbName,
 		}, cfg.IgnoreTables)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to create db operator, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create db operator, err: %v\n", err)))
 		return err
 	}
 	defer dbOper.Close()
@@ -59,13 +59,13 @@ func generateDBSQL(c *cli.Context) error {
 		err = dbOper.ConnectDB()
 		if err == nil {
 			log.Debugf("connect db success\n")
-			c.App.Writer.Write([]byte(fmt.Sprintf("%s%s%sdatabase exists%s%s, will generate%s %sinc.sql%s\n",
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%s%s%sdatabase exists%s%s, will generate%s %sinc.sql%s\n",
 				ColorStatementDiff, FontItalic, FontBold, ColorEnd,
 				ColorStatementDiff, ColorEnd,
 				ColorRelativeDir, ColorEnd)))
 			curDB, err := dbOper.GetCurDBSchema()
 			if err != nil {
-				c.App.Writer.Write([]byte(fmt.Sprintf("fail to get cur db schema, err: %v\n", err)))
+				cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to get cur db schema, err: %v\n", err)))
 				return err
 			}
 			log.Debugf("get current db schema success:%s", jgstr.JsonEncode(curDB))
@@ -80,10 +80,10 @@ func generateDBSQL(c *cli.Context) error {
 	f3, _ := os.OpenFile(filepath.Join(sqlRoot, "meta-data.sql"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 	defer f3.Close()
 	dbOper.OutputSQLForSchemaUpdating(m.Project.Database, f1, f2, f3)
-	c.App.Writer.Write([]byte(fmt.Sprintf("%sgenerate db sql success%s\n", ColorFileDone, ColorEnd)))
+	cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%sgenerate db sql success%s\n", ColorFileDone, ColorEnd)))
 
 	// copy schema.sql and meta-data.sql to <proj_root>/sql/
-	c.App.Writer.Write([]byte(fmt.Sprintf("%s%s%scopy%s %sschema.sql%s %s%sand%s %smeta-data.sql%s %s%sto%s %s<proj_root>/sql/%s\n",
+	cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%s%s%scopy%s %sschema.sql%s %s%sand%s %smeta-data.sql%s %s%sto%s %s<proj_root>/sql/%s\n",
 		ColorStatementDiff, FontItalic, FontBold, ColorEnd,
 		ColorFilesBase, ColorEnd,
 		ColorStatementDiff, FontItalic, ColorEnd,
@@ -94,18 +94,18 @@ func generateDBSQL(c *cli.Context) error {
 	projRoot := cfg.Project.Root
 	projSqlRoot := filepath.Join(projRoot, "sql")
 	if err = os.MkdirAll(projSqlRoot, 0755); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to create sql dir, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create sql dir, err: %v\n", err)))
 		return err
 	}
 	if _, err = jgfile.CopyFile(filepath.Join(sqlRoot, "schema.sql"), filepath.Join(projSqlRoot, "schema.sql")); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy schema.sql, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy schema.sql, err: %v\n", err)))
 		return err
 	}
-	c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, "schema.sql", ColorEnd, GreenCheck)))
+	cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, "schema.sql", ColorEnd, GreenCheck)))
 	if _, err = jgfile.CopyFile(filepath.Join(sqlRoot, "meta-data.sql"), filepath.Join(projSqlRoot, "meta-data.sql")); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy meta-data.sql, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy meta-data.sql, err: %v\n", err)))
 		return err
 	}
-	c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, "meta-data.sql", ColorEnd, GreenCheck)))
+	cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, "meta-data.sql", ColorEnd, GreenCheck)))
 	return nil
 }

@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-func showTemplateHelp(c *cli.Context) error {
-	c.App.Writer.Write([]byte(ColorStatementDiff + FontBold + FontItalic + "template placeholder:\n" + ColorEnd))
+func showTemplateHelp(cmd *cobra.Command) error {
+	cmd.OutOrStdout().Write([]byte(ColorStatementDiff + FontBold + FontItalic + "template placeholder:\n" + ColorEnd))
 	placeholders := [][2]string{
 		{"%%GO-MODULE%%", "go module name"},
 		{"%%PROJECT-NAME%%", "project name"},
@@ -17,7 +17,7 @@ func showTemplateHelp(c *cli.Context) error {
 		{"%%PROJECT-NAME-STRUCT%%", "project name as struct name"},
 	}
 	for _, ph := range placeholders {
-		c.App.Writer.Write([]byte(fmt.Sprintf("    %s%s%s\t%s%s%s\n",
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("    %s%s%s\t%s%s%s\n",
 			ColorStatementNew, ph[0], ColorEnd,
 			ColorFilesBase, ph[1], ColorEnd)))
 	}

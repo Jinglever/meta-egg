@@ -1,5 +1,11 @@
 package main
 
+import (
+	"meta-egg/internal/config"
+
+	"github.com/spf13/cobra"
+)
+
 const (
 	// ref: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors 8-bit
 	ColorEnd           = "\033[0m"
@@ -16,3 +22,12 @@ const (
 
 	GreenCheck = "\033[32m\u2713\033[0m"
 )
+
+func checkDebugMode(cmd *cobra.Command) {
+	debugFlag, _ = cmd.Flags().GetBool(FlagDebug)
+}
+
+func loadEnvConfig(cmd *cobra.Command) *config.EnvConfig {
+	envFile, _ := cmd.Flags().GetString(FlagEnv)
+	return config.LoadEnvFile(envFile)
+}

@@ -24,12 +24,12 @@ import (
 	"meta-egg/internal/model"
 
 	jgcmd "github.com/Jinglever/go-command"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-func newProject(c *cli.Context) error {
-	checkDebugMode(c)
-	customTemplateRoot := c.String(FlagTemplate)
+func newProject(cmd *cobra.Command) error {
+	checkDebugMode(cmd)
+	customTemplateRoot, _ := cmd.Flags().GetString(FlagTemplate)
 
 	proj := &model.Project{}
 
@@ -52,7 +52,7 @@ func newProject(c *cli.Context) error {
 	// ask for go version
 	proj.GoVersion = jgcmd.AskForInput(
 		"Please input go version",
-		"1.20",
+		"1.23.0",
 	)
 	// ask for server type
 	proj.ServerType = model.ServerType(jgcmd.AskForOption(
@@ -87,7 +87,7 @@ func newProject(c *cli.Context) error {
 		ep.DatabaseType = model.DatabaseType(jgcmd.AskForOption(
 			"Please select database type",
 			[]string{"MySQL", "PostgreSQL"},
-			"MySQL",
+			"PostgreSQL",
 		))
 
 		// ask for if need table demo
@@ -104,13 +104,13 @@ func newProject(c *cli.Context) error {
 	// get current directory
 	codeDir, err := os.Getwd()
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("failed to get current directory: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("failed to get current directory: %v\n", err)))
 		return err
 	}
 	projRoot := filepath.Join(codeDir, proj.Name)
 
 	if err = projgen.Generate(projRoot, proj, ep); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("failed to generate project: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("failed to generate project: %v\n", err)))
 		return err
 	}
 
@@ -121,7 +121,7 @@ func newProject(c *cli.Context) error {
 	// parse xml file
 	m, err := modeler.ParseXMLFile(cfg.Manifest.File)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
 		return err
 	}
 
@@ -130,107 +130,107 @@ func newProject(c *cli.Context) error {
 	// proto
 	rD2NC, err = protogen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate proto, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate proto, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// pkg
 	rD2NC, err = pkggen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate pkg, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate pkg, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// common
 	rD2NC, err = commongen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate common, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate common, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// model
 	rD2NC, err = modelgen.Generate(projRoot, m.Project, nil)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// repo
 	rD2NC, err = repogen.Generate(projRoot, m.Project, nil)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// domain
 	rD2NC, err = domaingen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate domain, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate domain, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// biz
 	rD2NC, err = bizgen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate biz, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate biz, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// handler
 	rD2NC, err = handlergen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate handler, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate handler, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// server
 	rD2NC, err = svcgen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate server, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate server, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// config
 	rD2NC, err = cfggen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate config, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate config, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// cmd
 	rD2NC, err = cmdgen.Generate(projRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate cmd, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate cmd, err: %v\n", err)))
 		return err
 	}
-	printRD2NC(rD2NC, c)
+	printRD2NC(rD2NC, cmd)
 
 	// apply custom template generator
 	if customTemplateRoot != "" {
 		_, err = csttplgen.Generate(projRoot, m.Project, customTemplateRoot)
 		if err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to apply custom template generator, err: %v\n", err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to apply custom template generator, err: %v\n", err)))
 			return err
 		}
 	}
 
 	// print project generated successfully in green color
-	c.App.Writer.Write([]byte("\033[32mProject generated successfully\033[0m\n"))
+	cmd.OutOrStdout().Write([]byte("\033[32mProject generated successfully\033[0m\n"))
 	return nil
 }
 
-func printRD2NC(rD2NC map[string]bool, c *cli.Context) {
+func printRD2NC(rD2NC map[string]bool, cmd *cobra.Command) {
 	for rd := range rD2NC {
-		c.App.Writer.Write([]byte(fmt.Sprintf("  %s [\033[32m\u2713\033[0m]\n", rd)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("  %s [\033[32m\u2713\033[0m]\n", rd)))
 	}
 }

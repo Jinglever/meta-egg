@@ -30,20 +30,20 @@ import (
 	jgcmd "github.com/Jinglever/go-command"
 	jgfile "github.com/Jinglever/go-file"
 
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-func updateProject(c *cli.Context) error {
+func updateProject(cmd *cobra.Command) error {
 	var err error
-	checkDebugMode(c)
-	cfg := loadEnvConfig(c)
-	tryUncertain := c.Bool(FlagUncertain)
-	customTemplateRoot := c.String(FlagTemplate)
+	checkDebugMode(cmd)
+	cfg := loadEnvConfig(cmd)
+	tryUncertain, _ := cmd.Flags().GetBool(FlagUncertain)
+	customTemplateRoot, _ := cmd.Flags().GetString(FlagTemplate)
 
 	// parse xml file
 	m, err := modeler.ParseXMLFile(cfg.Manifest.File)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("parse xml file failed: %v\n", err)))
 		return err
 	}
 	// ignore files
@@ -55,22 +55,22 @@ func updateProject(c *cli.Context) error {
 	// tmp目录
 	tmpRoot := filepath.Join(cfg.Manifest.Root, "generated")
 	if err = os.RemoveAll(tmpRoot); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to remove %s, err: %v\n", tmpRoot, err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to remove %s, err: %v\n", tmpRoot, err)))
 		return err
 	}
 	if err = os.MkdirAll(tmpRoot, 0755); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to create %s, err: %v\n", tmpRoot, err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create %s, err: %v\n", tmpRoot, err)))
 		return err
 	}
 
 	// bak目录
 	bakRoot := filepath.Join(cfg.Manifest.Root, "generated", "bak")
 	if err = os.RemoveAll(bakRoot); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to remove %s, err: %v\n", bakRoot, err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to remove %s, err: %v\n", bakRoot, err)))
 		return err
 	}
 	if err = os.MkdirAll(bakRoot, 0755); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to create %s, err: %v\n", bakRoot, err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create %s, err: %v\n", bakRoot, err)))
 		return err
 	}
 
@@ -79,7 +79,7 @@ func updateProject(c *cli.Context) error {
 
 	// project
 	if err = projgen.Generate(tmpRoot, m.Project, projgen.ExtendParam{}); err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("failed to generate project: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("failed to generate project: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm,
@@ -93,7 +93,7 @@ func updateProject(c *cli.Context) error {
 	// update proto
 	tmpRD2NC, err = protogen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate proto, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate proto, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -101,7 +101,7 @@ func updateProject(c *cli.Context) error {
 	// update pkg
 	tmpRD2NC, err = pkggen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate pkg, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate pkg, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -109,7 +109,7 @@ func updateProject(c *cli.Context) error {
 	// update common
 	tmpRD2NC, err = commongen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate common, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate common, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -129,7 +129,7 @@ func updateProject(c *cli.Context) error {
 				DBName:   dbName,
 			}, cfg.IgnoreTables)
 		if err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to create db operator, err: %v\n", err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create db operator, err: %v\n", err)))
 			return err
 		}
 		defer dbOper.Close()
@@ -138,7 +138,7 @@ func updateProject(c *cli.Context) error {
 	// update model
 	tmpRD2NC, err = modelgen.Generate(tmpRoot, m.Project, dbOper)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -146,7 +146,7 @@ func updateProject(c *cli.Context) error {
 	// update repo
 	tmpRD2NC, err = repogen.Generate(tmpRoot, m.Project, dbOper)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate model, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -154,7 +154,7 @@ func updateProject(c *cli.Context) error {
 	// biz
 	tmpRD2NC, err = bizgen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate biz, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate biz, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -162,7 +162,7 @@ func updateProject(c *cli.Context) error {
 	// update domain
 	tmpRD2NC, err = domaingen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate domain, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate domain, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -170,7 +170,7 @@ func updateProject(c *cli.Context) error {
 	// update handler
 	tmpRD2NC, err = handlergen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate handler, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate handler, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -178,7 +178,7 @@ func updateProject(c *cli.Context) error {
 	// update server
 	tmpRD2NC, err = svcgen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate server, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate server, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -186,7 +186,7 @@ func updateProject(c *cli.Context) error {
 	// update config
 	tmpRD2NC, err = cfggen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate config, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate config, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -194,7 +194,7 @@ func updateProject(c *cli.Context) error {
 	// update cmd
 	tmpRD2NC, err = cmdgen.Generate(tmpRoot, m.Project)
 	if err != nil {
-		c.App.Writer.Write([]byte(fmt.Sprintf("fail to generate cmd, err: %v\n", err)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to generate cmd, err: %v\n", err)))
 		return err
 	}
 	appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
@@ -203,14 +203,14 @@ func updateProject(c *cli.Context) error {
 	if customTemplateRoot != "" {
 		tmpRD2NC, err = csttplgen.Generate(tmpRoot, m.Project, customTemplateRoot)
 		if err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to apply custom template generator, err: %v\n", err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to apply custom template generator, err: %v\n", err)))
 			return err
 		}
 		appedRelativeDir2NeedConfirm(relativeDir2NeedConfirm, tmpRD2NC)
 	}
 
 	// replace
-	_, err = replaceCode(c, tmpRoot, cfg.Project.Root, bakRoot, relativeDir2NeedConfirm, tryUncertain, ignoreFiles)
+	_, err = replaceCode(cmd, tmpRoot, cfg.Project.Root, bakRoot, relativeDir2NeedConfirm, tryUncertain, ignoreFiles)
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func appedRelativeDir2NeedConfirm(a, b map[string]bool) {
 // relativeDir2NeedConfirm: key是相对于工程根目录的路径，值是布尔值，代表是否需要确认；注意，不会递归查看子目录
 // 需要确认才能替换的文件，替换时会先备份到bakRoot
 // 只有当tryUncertain为true时，才会尝试替换需要确认的文件，否则只替换无需确认的文件
-func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
+func replaceCode(cmd *cobra.Command, srcRoot, targetRoot, bakRoot string,
 	relativeDir2NeedConfirm map[string]bool, tryUncertain bool, ignoreFiles map[string]bool,
 ) (cnt int, err error) {
 	ignoreFilePattern := make([]glob.Glob, 0, len(ignoreFiles))
@@ -254,13 +254,13 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 		}
 		targetDir := filepath.Join(targetRoot, relativeDir)
 		if err = os.MkdirAll(targetDir, 0755); err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to create target dir %s, err: %v\n", targetDir, err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create target dir %s, err: %v\n", targetDir, err)))
 			return cnt, err
 		}
 		// scan files src root
 		files, err := os.ReadDir(srcDir)
 		if err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to read src dir %s, err: %v\n", srcDir, err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to read src dir %s, err: %v\n", srcDir, err)))
 			return cnt, err
 		}
 		// check if need replace
@@ -319,7 +319,7 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 	for relativeDir, files := range noConfirmRelativeDir2Files {
 		srcDir := filepath.Join(srcRoot, relativeDir)
 		targetDir := filepath.Join(targetRoot, relativeDir)
-		c.App.Writer.Write([]byte(fmt.Sprintf("replaced files in %s\n", relativeDir)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("replaced files in %s\n", relativeDir)))
 
 		for _, file := range files {
 			srcFile := filepath.Join(srcDir, file)
@@ -332,16 +332,16 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 
 			// copy
 			if _, err := jgfile.CopyFile(srcFile, targetFile); err != nil {
-				c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
+				cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
 				return cnt, err
 			}
-			c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
 			cnt++
 		}
 	}
 
 	if len(needConfirmRelativeDir2Files) == 0 {
-		c.App.Writer.Write([]byte(fmt.Sprintf("replace %v files\n", cnt)))
+		cmd.OutOrStdout().Write([]byte(fmt.Sprintf("replace %v files\n", cnt)))
 		return cnt, nil
 	}
 
@@ -358,7 +358,7 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 
 		bakDir := filepath.Join(bakRoot, relativeDir)
 		if err = os.MkdirAll(bakDir, 0755); err != nil {
-			c.App.Writer.Write([]byte(fmt.Sprintf("fail to create bak dir %s, err: %v\n", bakDir, err)))
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to create bak dir %s, err: %v\n", bakDir, err)))
 			return cnt, err
 		}
 		srcDir := filepath.Join(srcRoot, relativeDir)
@@ -379,16 +379,16 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 		}
 
 		if len(replaceMap) > 0 {
-			c.App.Writer.Write([]byte(fmt.Sprintf("%s%sFound %sdifferent%s %s%sfiles in%s %s%s%s\n",
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%s%sFound %sdifferent%s %s%sfiles in%s %s%s%s\n",
 				ColorStatementDiff, FontItalic, FontBold, ColorEnd,
 				ColorStatementDiff, FontItalic, ColorEnd,
 				ColorRelativeDir, relativeDir, ColorEnd,
 			)))
 			for idx, file := range replaceMap {
 				if (idx+1)%2 == 0 || idx == len(replaceMap)-1 {
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s\n", ColorFilesDiff, file, ColorEnd)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s\n", ColorFilesDiff, file, ColorEnd)))
 				} else {
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s", ColorFilesDiff, file, ColorEnd)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s", ColorFilesDiff, file, ColorEnd)))
 				}
 			}
 
@@ -406,30 +406,30 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 					// backup
 					bakFile := filepath.Join(bakDir, file)
 					if err = os.Rename(targetFile, bakFile); err != nil {
-						c.App.Writer.Write([]byte(fmt.Sprintf("fail to backup file %s to %s, err: %v\n", targetFile, bakFile, err)))
+						cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to backup file %s to %s, err: %v\n", targetFile, bakFile, err)))
 						return cnt, err
 					}
 					// copy
 					if _, err := jgfile.CopyFile(srcFile, targetFile); err != nil {
-						c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
+						cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
 						return cnt, err
 					}
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
 					cnt++
 				}
 			}
 		}
 		if len(newMap) > 0 {
-			c.App.Writer.Write([]byte(fmt.Sprintf("%s%sFound %snew%s %s%sfiles in%s %s%s%s\n",
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%s%sFound %snew%s %s%sfiles in%s %s%s%s\n",
 				ColorStatementNew, FontItalic, FontBold, ColorEnd,
 				ColorStatementNew, FontItalic, ColorEnd,
 				ColorRelativeDir, relativeDir, ColorEnd,
 			)))
 			for idx, file := range newMap {
 				if (idx+1)%2 == 0 || idx == len(newMap)-1 {
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s\n", ColorFilesNew, file, ColorEnd)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s\n", ColorFilesNew, file, ColorEnd)))
 				} else {
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s", ColorFilesNew, file, ColorEnd)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s", ColorFilesNew, file, ColorEnd)))
 				}
 			}
 
@@ -446,16 +446,16 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 
 					// copy
 					if _, err := jgfile.CopyFile(srcFile, targetFile); err != nil {
-						c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
+						cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
 						return cnt, err
 					}
-					c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
 					cnt++
 				}
 			}
 		}
 		if baseGo != "" {
-			c.App.Writer.Write([]byte(fmt.Sprintf("%s%sFound %sdifferent%s %sbase.go%s %s%sin%s %s%s%s\n",
+			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("%s%sFound %sdifferent%s %sbase.go%s %s%sin%s %s%s%s\n",
 				ColorStatementBase, FontItalic, FontBold, ColorEnd,
 				ColorFilesBase, ColorEnd,
 				ColorStatementBase, FontItalic, ColorEnd,
@@ -476,21 +476,21 @@ func replaceCode(c *cli.Context, srcRoot, targetRoot, bakRoot string,
 				if jgfile.IsFile(targetFile) {
 					bakFile := filepath.Join(bakDir, file)
 					if err = os.Rename(targetFile, bakFile); err != nil {
-						c.App.Writer.Write([]byte(fmt.Sprintf("fail to backup file %s to %s, err: %v\n", targetFile, bakFile, err)))
+						cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to backup file %s to %s, err: %v\n", targetFile, bakFile, err)))
 						return cnt, err
 					}
 				}
 				// copy
 				if _, err := jgfile.CopyFile(srcFile, targetFile); err != nil {
-					c.App.Writer.Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
+					cmd.OutOrStdout().Write([]byte(fmt.Sprintf("fail to copy file %s to %s, err: %v\n", srcFile, targetFile, err)))
 					return cnt, err
 				}
-				c.App.Writer.Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
+				cmd.OutOrStdout().Write([]byte(fmt.Sprintf("\t%s%s%s [%s]\n", ColorFileDone, file, ColorEnd, GreenCheck)))
 				cnt++
 			}
 		}
 	}
-	c.App.Writer.Write([]byte(fmt.Sprintf("replace/new %v files\n", cnt)))
+	cmd.OutOrStdout().Write([]byte(fmt.Sprintf("replace/new %v files\n", cnt)))
 	return cnt, nil
 }
 
