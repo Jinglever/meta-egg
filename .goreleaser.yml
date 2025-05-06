@@ -22,7 +22,7 @@ builds:
     flags: -trimpath
 
 archives:
-  - format: [ 'tar.gz', 'zip' ]
+  - formats: [ 'tar.gz', 'zip' ]
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
 
 brews:
