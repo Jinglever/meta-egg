@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - v*
 
 jobs:
   build:
@@ -22,7 +23,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.8' # or your preferred Go version
+          go-version: '1.23.8'
 
       - name: Build binary with version info
         env:
@@ -58,11 +59,12 @@ jobs:
             tar -czvf meta-egg-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz meta-egg
           fi
 
-      - name: Upload Release Asset
+      - name: Create GitHub Release and Upload Assets
         uses: ncipollo/release-action@v1
         with:
-          allowUpdates: true
           tag: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generateReleaseNotes: true
           artifacts: |
             meta-egg-*.zip
             meta-egg-*.tar.gz
