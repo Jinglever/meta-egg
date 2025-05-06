@@ -25,13 +25,19 @@ archives:
 
 brews:
   - name: meta-egg
+    folder: Formula
     repository:
       owner: Jinglever
       name: homebrew-tap
+      token: "{{ .secrets.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/Jinglever/meta-egg"
+    description: "Awesome Tools to Generate MetaEgg Framework"
     commit_author:
       name: meta-egg-bot
       email: zhihao.zhou.bupt@gmail.com
-    description: "Awesome Tools to Generate MetaEgg Framework"
-    homepage: "https://github.com/Jinglever/meta-egg"
+    install: |
+      bin.install "meta-egg"
+      generate_completions_from_executable("#{bin}/meta-egg", "completion")
     test: |
-      meta-egg --version
+      system "#{bin}/meta-egg" "--version"
