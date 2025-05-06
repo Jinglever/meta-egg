@@ -62,10 +62,32 @@ install_completion() {
   SHELL_NAME=$(basename "$SHELL")
   case "$SHELL_NAME" in
     zsh)
-      COMPLETION_DIR="${ZSH_COMPLETION_DIR:-/usr/local/share/zsh/site-functions}"
-      sudo mkdir -p "$COMPLETION_DIR"
-      sudo "$INSTALL_DIR/$BINARY_NAME" completion zsh | sudo tee "$COMPLETION_DIR/_meta-egg" > /dev/null
-      echo "Zsh completion installed to $COMPLETION_DIR/_meta-egg"
+      ZSH_FPATHS=$(zsh -c 'print -l $fpath')
+      if echo "$ZSH_FPATHS" | grep -qx '/usr/local/share/zsh/site-functions'; then
+        COMPLETION_DIR="/usr/local/share/zsh/site-functions"
+        if sudo test -w "$COMPLETION_DIR" 2>/dev/null; then
+          sudo "$INSTALL_DIR/$BINARY_NAME" completion zsh | sudo tee "$COMPLETION_DIR/_meta-egg" > /dev/null
+          echo "Zsh completion installed to $COMPLETION_DIR/_meta-egg"
+        else
+          "$INSTALL_DIR/$BINARY_NAME" completion zsh > "$HOME/.meta-egg-completion.zsh"
+          echo "No write permission to $COMPLETION_DIR, installed to $HOME/.meta-egg-completion.zsh"
+          echo "Add 'source ~/.meta-egg-completion.zsh' to your ~/.zshrc to enable completion."
+        fi
+      elif echo "$ZSH_FPATHS" | grep -qx '/usr/share/zsh/site-functions'; then
+        COMPLETION_DIR="/usr/share/zsh/site-functions"
+        if sudo test -w "$COMPLETION_DIR" 2>/dev/null; then
+          sudo "$INSTALL_DIR/$BINARY_NAME" completion zsh | sudo tee "$COMPLETION_DIR/_meta-egg" > /dev/null
+          echo "Zsh completion installed to $COMPLETION_DIR/_meta-egg"
+        else
+          "$INSTALL_DIR/$BINARY_NAME" completion zsh > "$HOME/.meta-egg-completion.zsh"
+          echo "No write permission to $COMPLETION_DIR, installed to $HOME/.meta-egg-completion.zsh"
+          echo "Add 'source ~/.meta-egg-completion.zsh' to your ~/.zshrc to enable completion."
+        fi
+      else
+        "$INSTALL_DIR/$BINARY_NAME" completion zsh > "$HOME/.meta-egg-completion.zsh"
+        echo "Zsh completion installed to $HOME/.meta-egg-completion.zsh"
+        echo "Add 'source ~/.meta-egg-completion.zsh' to your ~/.zshrc to enable completion."
+      fi
       ;;
     bash)
       # 优先用 /etc/bash_completion.d，若无权限则用 ~/.meta-egg-completion.bash

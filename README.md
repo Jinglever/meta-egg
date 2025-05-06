@@ -17,7 +17,7 @@ https://github.com/Jinglever/meta-egg-layout
 ## One-line Install (Linux)
 
 ```bash
-curl -fsSL https://github.com/Jinglever/meta-egg/raw/master/install.sh | sh
+curl -fsSL https://github.com/Jinglever/meta-egg/raw/master/install.sh | bash
 ```
 
 ## One-line Install (Windows)
