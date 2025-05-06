@@ -25,11 +25,11 @@ archives:
 
 brews:
   - name: meta-egg
-    folder: Formula
+    directory: Formula
     repository:
       owner: Jinglever
       name: homebrew-tap
-      token: "{{ .secrets.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/Jinglever/meta-egg"
     description: "Awesome Tools to Generate MetaEgg Framework"

@@ -7,12 +7,15 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23.8'
+          cache: true
       - uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
