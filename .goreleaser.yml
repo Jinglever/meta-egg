@@ -15,7 +15,6 @@ builds:
       -X "meta-egg/pkg/version.GitHash={{ .Commit }}"
       -X "meta-egg/pkg/version.GitBranch={{ .Branch }}"
       -X "meta-egg/pkg/version.GitTag={{ .Tag }}"
-      -X "meta-egg/pkg/version.GitDirty={{ .Dirty }}"
       -X "meta-egg/pkg/version.Debug=false"
     flags: -trimpath
 
@@ -25,12 +24,6 @@ archives:
 
 brews:
   - name: meta-egg
-    tap:
-      owner: Jinglever
-      name: homebrew-tap
-    commit_author:
-      name: meta-egg-bot
-      email: zhihao.zhou.bupt@gmail.com
     description: "Awesome Tools to Generate MetaEgg Framework"
     homepage: "https://github.com/Jinglever/meta-egg"
     test: |
