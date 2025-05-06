@@ -1,0 +1,37 @@
+project_name: meta-egg
+release:
+  github:
+    owner: Jinglever
+    name: meta-egg
+
+builds:
+  - id: meta-egg
+    main: ./cmd/meta-egg
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: >-
+      -s -w
+      -X "meta-egg/pkg/version.BuildTS={{ .Date }}"
+      -X "meta-egg/pkg/version.GitHash={{ .Commit }}"
+      -X "meta-egg/pkg/version.GitBranch={{ .Branch }}"
+      -X "meta-egg/pkg/version.GitTag={{ .Tag }}"
+      -X "meta-egg/pkg/version.GitDirty={{ .Dirty }}"
+      -X "meta-egg/pkg/version.Debug=false"
+    flags: -trimpath
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+
+brews:
+  - name: meta-egg
+    tap:
+      owner: Jinglever
+      name: homebrew-tap
+    commit_author:
+      name: meta-egg-bot
+      email: zhihao.zhou.bupt@gmail.com
+    description: "Awesome Tools to Generate MetaEgg Framework"
+    homepage: "https://github.com/Jinglever/meta-egg"
+    test: |
+      meta-egg --version
