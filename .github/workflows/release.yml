@@ -59,10 +59,10 @@ jobs:
           fi
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          files: |
+          allowUpdates: true
+          tag: ${{ github.ref_name }}
+          artifacts: |
             meta-egg-*.zip
             meta-egg-*.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
