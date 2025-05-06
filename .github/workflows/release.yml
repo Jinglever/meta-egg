@@ -59,12 +59,27 @@ jobs:
             tar -czvf meta-egg-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz meta-egg
           fi
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: meta-egg-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            meta-egg-*.zip
+            meta-egg-*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
       - name: Create GitHub Release and Upload Assets
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generateReleaseNotes: true
-          artifacts: |
-            meta-egg-*.zip
-            meta-egg-*.tar.gz
+          artifacts: ./artifacts/**/*.zip,./artifacts/**/*.tar.gz
