@@ -20,6 +20,8 @@ builds:
       -X "meta-egg/pkg/version.GitDirty=false"
       -X "meta-egg/pkg/version.Debug=false"
     flags: -trimpath
+    env:
+      - CGO_ENABLED=0
 
 archives:
   - formats: [ 'zip' ]
