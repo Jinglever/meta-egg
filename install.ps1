@@ -48,4 +48,21 @@ if ($envPath -notlike "*$installDir*") {
 Remove-Item $tmpZip
 
 Write-Host "meta-egg ($latest) installed successfully!" -ForegroundColor Green
-Write-Host "Run 'meta-egg --help' to get started." 
+Write-Host "Run 'meta-egg --help' to get started."
+
+# 生成 PowerShell completion
+$completionScript = "$HOME\meta-egg-completion.ps1"
+& "$installDir\$binary" completion powershell > $completionScript
+Write-Host "PowerShell completion script generated at $completionScript"
+
+# 自动添加到 $PROFILE
+if (-not (Test-Path $PROFILE)) {
+    New-Item -ItemType File -Path $PROFILE -Force | Out-Null
+}
+if (-not (Select-String -Path $PROFILE -Pattern "meta-egg-completion.ps1" -Quiet)) {
+    Add-Content -Path $PROFILE -Value ". '$completionScript'"
+    Write-Host "Added completion script to your PowerShell profile ($PROFILE)."
+    Write-Host "Restart PowerShell to enable meta-egg completion."
+} else {
+    Write-Host "Completion script already referenced in your PowerShell profile."
+} 

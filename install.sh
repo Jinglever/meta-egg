@@ -55,4 +55,43 @@ cd /
 rm -rf "$TMP_DIR"
 
 echo "meta-egg ($LATEST) installed successfully!"
-echo "Run 'meta-egg --help' to get started." 
+echo "Run 'meta-egg --help' to get started."
+
+# 安装 shell completion
+install_completion() {
+  SHELL_NAME=$(basename "$SHELL")
+  case "$SHELL_NAME" in
+    zsh)
+      COMPLETION_DIR="${ZSH_COMPLETION_DIR:-/usr/local/share/zsh/site-functions}"
+      sudo mkdir -p "$COMPLETION_DIR"
+      sudo "$INSTALL_DIR/$BINARY_NAME" completion zsh | sudo tee "$COMPLETION_DIR/_meta-egg" > /dev/null
+      echo "Zsh completion installed to $COMPLETION_DIR/_meta-egg"
+      ;;
+    bash)
+      # 优先用 /etc/bash_completion.d，若无权限则用 ~/.meta-egg-completion.bash
+      if sudo test -w /etc/bash_completion.d 2>/dev/null; then
+        COMPLETION_DIR="/etc/bash_completion.d"
+        sudo "$INSTALL_DIR/$BINARY_NAME" completion bash | sudo tee "$COMPLETION_DIR/meta-egg" > /dev/null
+        echo "Bash completion installed to $COMPLETION_DIR/meta-egg"
+      else
+        COMPLETION_FILE="$HOME/.meta-egg-completion.bash"
+        "$INSTALL_DIR/$BINARY_NAME" completion bash > "$COMPLETION_FILE"
+        echo "Bash completion installed to $COMPLETION_FILE"
+        echo "Add 'source $COMPLETION_FILE' to your ~/.bashrc to enable completion."
+      fi
+      ;;
+    fish)
+      COMPLETION_DIR="$HOME/.config/fish/completions"
+      mkdir -p "$COMPLETION_DIR"
+      "$INSTALL_DIR/$BINARY_NAME" completion fish > "$COMPLETION_DIR/meta-egg.fish"
+      echo "Fish completion installed to $COMPLETION_DIR/meta-egg.fish"
+      ;;
+    *)
+      echo "Unknown shell: $SHELL_NAME. You can generate completion manually with 'meta-egg completion <shell>'"
+      ;;
+  esac
+}
+
+install_completion
+
+echo "If completion does not work immediately, try restarting your terminal." 
