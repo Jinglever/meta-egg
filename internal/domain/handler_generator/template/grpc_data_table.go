@@ -13,7 +13,7 @@ func (h *Handler) Create%%TABLE-NAME-STRUCT%%(ctx context.Context,
 		log.WithError(err).Error("req.ValidateAll failed")
 		return nil, cerror.InvalidArgument(err.Error())
 	}
-	%%PREPARE-ASSIGN-CREATE-TO-BO-GRPC%% %%TABLE-NAME-VAR%%BO := &biz.%%TABLE-NAME-STRUCT%%BO{%%ASSIGN-CREATE-TO-BO-GRPC%%
+	%%PREPARE-ASSIGN-CREATE-TO-BO-GRPC%% %%RL-CREATE-ASSIGN-TO-BO-GRPC%% %%TABLE-NAME-VAR%%BO := &biz.%%TABLE-NAME-STRUCT%%BO{%%ASSIGN-CREATE-TO-BO-GRPC%%
 	}
 	err = h.BizService.Create%%TABLE-NAME-STRUCT%%(ctx, %%TABLE-NAME-VAR%%BO)
 	if err != nil {
@@ -34,7 +34,7 @@ var TplGRPCHandlerGetList string = `func (h *Handler) To%%TABLE-NAME-STRUCT%%Lis
 ) ([]*api.%%TABLE-NAME-STRUCT%%ListInfo, error) {
 	list := make([]*api.%%TABLE-NAME-STRUCT%%ListInfo, 0, len(objs))
 	for i := range objs {
-		%%PREPARE-ASSIGN-BO-FOR-LIST%% list = append(list, &api.%%TABLE-NAME-STRUCT%%ListInfo{%%ASSIGN-BO-FOR-LIST%%
+		%%PREPARE-ASSIGN-BO-FOR-LIST%% %%RL-CONVERT-IN-TO-LISTINFO-GRPC%% list = append(list, &api.%%TABLE-NAME-STRUCT%%ListInfo{%%ASSIGN-BO-FOR-LIST%%%%RL-FIELDS-ASSIGN-IN-LISTINFO-GRPC%%
 		})
 	}
 	return list, nil
@@ -119,6 +119,80 @@ func (h *Handler) Update%%TABLE-NAME-STRUCT%%(ctx context.Context,
 }
 `
 
+// RL表操作函数模板 - gRPC版本
+var TplGRPCRLHandlerAdd string = `
+// 添加%%RL-TABLE-COMMENT%%
+func (h *Handler) Add%%RL-TABLE-NAME-STRUCT%%(ctx context.Context,
+	req *api.Add%%RL-TABLE-NAME-STRUCT%%Request,
+) (*api.%%RL-TABLE-NAME-STRUCT%%Detail, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	%%RL-TABLE-NAME-VAR%%BO := &biz.%%RL-TABLE-NAME-STRUCT%%BO{%%RL-BO-ASSIGN-GRPC%%
+	}
+	err = h.BizService.Add%%RL-TABLE-NAME-STRUCT%%(ctx, req.%%TABLE-NAME-STRUCT%%Id, %%RL-TABLE-NAME-VAR%%BO)
+	if err != nil {
+		log.WithError(err).Error("BizService.Add%%RL-TABLE-NAME-STRUCT%% failed")
+		return nil, err
+	}
+	d := &api.%%RL-TABLE-NAME-STRUCT%%Detail{%%RL-DETAIL-ASSIGN-GRPC%%
+	}
+	return d, nil
+}`
+
+var TplGRPCRLHandlerRemove string = `
+// 删除%%RL-TABLE-COMMENT%%
+func (h *Handler) Remove%%RL-TABLE-NAME-STRUCT%%(ctx context.Context,
+	req *api.Remove%%RL-TABLE-NAME-STRUCT%%Request,
+) (*emptypb.Empty, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+	err = h.BizService.Remove%%RL-TABLE-NAME-STRUCT%%(ctx, req.%%TABLE-NAME-STRUCT%%Id, req.%%RL-TABLE-NAME-STRUCT%%Id)
+	if err != nil {
+		log.WithError(err).Error("BizService.Remove%%RL-TABLE-NAME-STRUCT%% failed")
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}`
+
+var TplGRPCRLHandlerGet string = `
+// 获取所有%%RL-TABLE-COMMENT%%
+func (h *Handler) GetAll%%RL-TABLE-NAME-STRUCT%%(ctx context.Context,
+	req *api.GetAll%%RL-TABLE-NAME-STRUCT%%Request,
+) (*api.GetAll%%RL-TABLE-NAME-STRUCT%%Response, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+	%%RL-TABLE-NAME-VAR%%BOs, err := h.BizService.GetAll%%RL-TABLE-NAME-STRUCT%%(ctx, req.%%TABLE-NAME-STRUCT%%Id)
+	if err != nil {
+		log.WithError(err).Error("BizService.GetAll%%RL-TABLE-NAME-STRUCT%% failed")
+		return nil, err
+	}
+	list := make([]*api.%%RL-TABLE-NAME-STRUCT%%Detail, 0, len(%%RL-TABLE-NAME-VAR%%BOs))
+	for _, %%RL-TABLE-NAME-VAR%%BO := range %%RL-TABLE-NAME-VAR%%BOs {
+		detail := &api.%%RL-TABLE-NAME-STRUCT%%Detail{%%RL-DETAIL-ASSIGN-LOOP-GRPC%%
+		}
+		list = append(list, detail)
+	}
+	return &api.GetAll%%RL-TABLE-NAME-STRUCT%%Response{
+		List: list,
+	}, nil
+}`
+
 var TplGRPCTable string = helper.PH_META_EGG_HEADER + `
 package handler
 
@@ -140,7 +214,7 @@ import (
 func (h *Handler) To%%TABLE-NAME-STRUCT%%Detail(ctx context.Context,
 	bo *biz.%%TABLE-NAME-STRUCT%%BO,
 ) (*api.%%TABLE-NAME-STRUCT%%Detail, error) {
-	%%PREPARE-ASSIGN-BO-TO-VO%% return &api.%%TABLE-NAME-STRUCT%%Detail{%%ASSIGN-BO-TO-VO-GRPC%%
+	%%PREPARE-ASSIGN-BO-TO-VO-GRPC%% %%RL-CONVERT-IN-TO-DETAIL-GRPC%% return &api.%%TABLE-NAME-STRUCT%%Detail{%%ASSIGN-BO-TO-VO-GRPC%%%%RL-FIELDS-ASSIGN-IN-DETAIL-GRPC%%
 	}, nil
 }
 
@@ -168,4 +242,6 @@ func (h *Handler) Get%%TABLE-NAME-STRUCT%%Detail(ctx context.Context,
 %%TPL-GRPC-HANDLER-GET-LIST%%
 %%TPL-GRPC-HANDLER-UPDATE%%
 %%TPL-GRPC-HANDLER-DELETE%%
+
+%%RL-GRPC-HANDLER-FUNCTIONS%%
 `

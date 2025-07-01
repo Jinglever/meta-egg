@@ -1,0 +1,121 @@
+---
+description: overview about this project.
+globs: 
+alwaysApply: false
+---
+# Meta-Egg Project Overview
+
+Meta-egg is a Golang code generation tool that creates a complete web service framework with a clean architecture pattern. It generates projects with predefined structure, database models, APIs, and deployment configurations.
+
+## Project Purpose
+- **Framework Generator**: Creates a standardized Golang web service framework
+- **Code Generation**: Generates models, repositories, handlers, and business logic from XML manifests
+- **Clean Architecture**: Enforces separation of concerns with clear layer boundaries
+- **Database Support**: Supports MySQL and PostgreSQL with automatic migration generation
+
+## Key Components
+
+### CLI Application ([cmd/meta-egg/main.go](mdc:cmd/meta-egg/main.go))
+The main entry point provides these commands:
+- `meta-egg new` - Create new projects interactively
+- `meta-egg update -e ./env.yml` - Update existing projects from manifest
+- `meta-egg db -e ./env.yml` - Generate database SQL files
+- `meta-egg help` - Show command help and template placeholders
+
+### Core Architecture
+
+#### 1. Domain Layer ([internal/domain/](mdc:internal/domain))
+Contains multiple specialized code generators:
+- **project_generator**: Scaffolds basic project structure ([README.md](mdc:README.md), [Makefile](mdc:Makefile), [go.mod](mdc:go.mod))
+- **model_generator**: Creates database model definitions
+- **repo_generator**: Generates repository interfaces and implementations
+- **handler_generator**: Creates HTTP/gRPC API handlers
+- **biz_generator**: Generates business logic layer
+- **server_generator**: Creates server setup and middleware
+- **proto_generator**: Generates protobuf definitions
+- **config_generator**: Creates configuration management
+
+#### 2. Modeler ([internal/domain/modeler/modeler.go](mdc:internal/domain/modeler/modeler.go))
+- Parses XML manifest files defining project structure
+- Validates project definitions
+- Converts XML to internal Go models
+
+#### 3. Templates ([internal/domain/*/template/](mdc:internal/domain))
+- Contains code templates for each generator
+- Uses placeholder replacement system
+- Supports customization via template override
+
+### Generated Project Structure
+When meta-egg generates a project, it creates this directory layout:
+```
+generated-project/
+├── api/                 # Generated API code from protobuf
+├── cmd/                 # Application entry points
+├── configs/             # Configuration files
+├── gen/
+│   ├── model/          # Generated database models
+│   └── repo/           # Generated repository interfaces
+├── internal/
+│   ├── biz/            # Business logic layer
+│   ├── common/         # Shared utilities
+│   ├── handler/        # API handlers (HTTP/gRPC)
+│   ├── repo/           # Repository implementations
+│   ├── server/         # Server setup and middleware
+│   └── usecase/        # Cross-entity business logic
+├── _manifest/          # Meta-egg workspace
+├── proto/              # Protobuf definitions
+└── sql/                # Database migrations
+```
+
+## Key Features
+
+### 1. Manifest-Driven Development
+- Projects defined in XML manifests ([_manifest/*.xml](mdc:_manifest))
+- Version-controlled project definitions
+- Incremental updates support
+
+### 2. Database Integration
+- Automatic model generation from entity definitions
+- Repository pattern implementation
+- SQL migration generation
+- Support for MySQL and PostgreSQL
+
+### 3. API Generation
+- HTTP REST APIs with proper routing
+- gRPC service definitions
+- Swagger documentation generation
+- Input validation and error handling
+
+### 4. Development Tools
+- Hot reload support
+- Debug configurations
+- Testing framework setup
+- Docker deployment files
+
+## Dependencies ([go.mod](mdc:go.mod))
+Key external libraries:
+- **Cobra**: CLI framework for command structure
+- **Viper**: Configuration management
+- **GORM**: ORM for database operations
+- **Logrus**: Structured logging
+- **Jinglever libraries**: Custom utilities for file, string, and database operations
+
+## Build System ([Makefile](mdc:Makefile))
+- Cross-platform builds (Windows, Linux, macOS)
+- ARM64 and AMD64 architecture support
+- Version embedding with Git metadata
+- Debug and release configurations
+
+## Installation Methods
+1. **One-line install**: curl/PowerShell scripts
+2. **Homebrew**: `brew install jinglever/meta-egg/meta-egg`
+3. **Manual**: Download from GitHub releases
+
+## Typical Workflow
+1. Run `meta-egg new` to create project structure
+2. Define entities in XML manifest files
+3. Run `meta-egg update` to generate/update code
+4. Run `meta-egg db` to generate database migrations
+5. Implement custom business logic in generated stubs
+
+This tool follows clean architecture principles and provides a complete foundation for Golang web services with standardized patterns and best practices.

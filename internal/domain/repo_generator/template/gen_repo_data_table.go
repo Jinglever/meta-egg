@@ -58,6 +58,7 @@ type %%TABLE-NAME-STRUCT%%Repo interface {
 	DeleteByID(ctx context.Context, id uint64) (rowsAffected int64, err error)
 	DeleteByIDs(ctx context.Context, ids []uint64) (rowsAffected int64, err error)
 	Count(ctx context.Context, opts ...gormx.Option) (count int64, err error)
+%%RL-METHODS-INTERFACE%%
 }
 
 type %%TABLE-NAME-STRUCT%%RepoImpl struct {
@@ -76,7 +77,7 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Gets(ctx context.Context, opts ...gormx.
 	for _, opt := range opts {
 		tx = opt(tx)
 	}
-	if err := tx.Find(&ms).Error; err != nil {
+%%RL-LIST-PRELOAD%%	if err := tx.Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	return ms, nil
@@ -86,8 +87,11 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Gets(ctx context.Context, opts ...gormx.
 func (s *%%TABLE-NAME-STRUCT%%RepoImpl) GetByID(ctx context.Context, id uint64, opts ...gormx.Option) (*model.%%TABLE-NAME-STRUCT%%, error) { //nolint
 	var ms []*model.%%TABLE-NAME-STRUCT%%
 	opts = append(opts, gormx.Where(model.Col%%TABLE-NAME-STRUCT%%%%COL-ID%%+" = ?", id), gormx.Limit(1))
-	ms, err := s.Gets(ctx, opts...)
-	if err != nil {
+	tx := s.GetTX(ctx)
+	for _, opt := range opts {
+		tx = opt(tx)
+	}
+%%RL-DETAIL-PRELOAD%%	if err := tx.Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	if len(ms) == 0 {
@@ -199,4 +203,6 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Count(ctx context.Context, opts ...gormx
 	}
 	return
 }
+
+%%RL-METHODS-IMPLEMENTATION%%
 `

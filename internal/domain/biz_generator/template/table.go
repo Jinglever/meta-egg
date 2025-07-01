@@ -26,6 +26,7 @@ func (b *BizService) Create%%TABLE-NAME-STRUCT%%(ctx context.Context, obj *%%TAB
 			log.WithError(err).Error("fail to create %%TABLE-NAME%%")
 			return cerror.Internal(err.Error())
 		}
+		%%RL-CREATE-IN-TRANSACTION%%
 		bo, err := b.To%%TABLE-NAME-STRUCT%%BO(txCtx, m)
 		if err != nil {
 			log.WithError(err).Error("fail to convert %%TABLE-NAME%% model to %%TABLE-NAME-STRUCT%%BO")
@@ -38,14 +39,14 @@ func (b *BizService) Create%%TABLE-NAME-STRUCT%%(ctx context.Context, obj *%%TAB
 `
 
 var TplFuncGetList = `
-type %%TABLE-NAME-STRUCT%%ListBO struct {%%COL-LIST-FOR-LIST%%
-}
+%%RL-LIST-BO-DEFINITIONS%%type %%TABLE-NAME-STRUCT%%ListBO struct {%%COL-LIST-FOR-LIST%%
+%%RL-LIST-BO-FIELDS%%}
 
 func (b *BizService) To%%TABLE-NAME-STRUCT%%ListBO(ctx context.Context, ms []*model.%%TABLE-NAME-STRUCT%%) ([]*%%TABLE-NAME-STRUCT%%ListBO, error) {
 	list := make([]*%%TABLE-NAME-STRUCT%%ListBO, 0, len(ms))
 	for i := range ms {
 		%%PREPARE-ASSIGN-MODEL-FOR-LIST%% list = append(list, &%%TABLE-NAME-STRUCT%%ListBO{%%ASSIGN-MODEL-FOR-LIST%%
-		})
+%%RL-ASSIGN-MODEL-TO-LIST-BO%%		})
 	}
 	return list, nil
 }
@@ -108,12 +109,16 @@ var TplFuncDelete = `
 func (b *BizService) Delete%%TABLE-NAME-STRUCT%%ByID(ctx context.Context, id uint64) error {
 	log := contexts.GetLogger(ctx).
 		WithField("id", id)
-	_, err := b.%%TABLE-NAME-STRUCT%%Repo.DeleteByID(ctx, id)
-	if err != nil {
-		log.WithError(err).Error("fail to delete %%TABLE-NAME%%")
-		return cerror.Internal(err.Error())
-	}
-	return nil
+	return b.Resource.DB.Transaction(ctx, func(txCtx context.Context) error {
+		var err error
+		%%RL-CASCADE-DELETE-IN-BIZ%%
+		_, err = b.%%TABLE-NAME-STRUCT%%Repo.DeleteByID(txCtx, id)
+		if err != nil {
+			log.WithError(err).Error("fail to delete %%TABLE-NAME%%")
+			return cerror.Internal(err.Error())
+		}
+		return nil
+	})
 }
 `
 
@@ -136,12 +141,14 @@ import (
 	log "%%GO-MODULE%%/pkg/log"
 )
 
+%%RL-BO-DEFINITIONS%%
+
 type %%TABLE-NAME-STRUCT%%BO struct {%%COL-LIST-IN-BO%%
-}
+%%RL-BO-FIELDS%%}
 
 func (b *BizService) To%%TABLE-NAME-STRUCT%%BO(ctx context.Context, m *model.%%TABLE-NAME-STRUCT%%) (*%%TABLE-NAME-STRUCT%%BO, error) {
 	%%PREPARE-ASSIGN-MODEL-TO-BO%% return &%%TABLE-NAME-STRUCT%%BO{%%ASSIGN-MODEL-TO-BO%%
-	}, nil
+%%RL-ASSIGN-MODEL-TO-BO%%	}, nil
 }
 
 %%TPL-FUNC-CREATE%%
@@ -169,4 +176,5 @@ func (b *BizService) Get%%TABLE-NAME-STRUCT%%ByID(ctx context.Context, id uint64
 %%TPL-FUNC-GET-LIST%%
 %%TPL-FUNC-UPDATE%%
 %%TPL-FUNC-DELETE%%
+%%RL-METHODS%%
 `

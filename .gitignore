@@ -19,5 +19,6 @@
 test/_data/conf.yml
 test/_data/*.sql
 test/_data/*.txt
-build/bin/*
+build/*
+!build/.gitkeep
 .DS_Store

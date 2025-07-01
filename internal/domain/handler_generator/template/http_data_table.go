@@ -2,7 +2,7 @@ package template
 
 import "meta-egg/internal/domain/helper"
 
-var TplHTTPHandlerCreate string = `type ReqCreate%%TABLE-NAME-STRUCT%% struct {%%COL-LIST-FOR-CREATE%%
+var TplHTTPHandlerCreate string = `type ReqCreate%%TABLE-NAME-STRUCT%% struct {%%COL-LIST-FOR-CREATE%%%%RL-FIELDS-IN-CREATE%%
 }
 
 //	@Id			Create%%TABLE-NAME-STRUCT%%
@@ -27,7 +27,7 @@ func (h *Handler) Create%%TABLE-NAME-STRUCT%%(c *gin.Context) {
 	log := contexts.GetLogger(ctx).
 		WithField("req", jgstr.JsonEncode(req))
 
-	%%PREPARE-ASSIGN-CREATE-TO-BO%% %%TABLE-NAME-VAR%%BO := &biz.%%TABLE-NAME-STRUCT%%BO{%%ASSIGN-CREATE-TO-BO%%
+	%%PREPARE-ASSIGN-CREATE-TO-BO%% %%RL-CREATE-ASSIGN-TO-BO%% %%TABLE-NAME-VAR%%BO := &biz.%%TABLE-NAME-STRUCT%%BO{%%ASSIGN-CREATE-TO-BO%%
 	}
 	err = h.BizService.Create%%TABLE-NAME-STRUCT%%(ctx, %%TABLE-NAME-VAR%%BO)
 	if err != nil {
@@ -45,14 +45,16 @@ func (h *Handler) Create%%TABLE-NAME-STRUCT%%(c *gin.Context) {
 }
 `
 
-var TplHTTPHandlerGetList string = `// %%TABLE-COMMENT%%列表信息
-type %%TABLE-NAME-STRUCT%%ListInfo struct {%%COL-LIST-FOR-LIST%%
+var TplHTTPHandlerGetList string = `%%RL-LISTINFO-STRUCTS%%
+
+// %%TABLE-COMMENT%%列表信息
+type %%TABLE-NAME-STRUCT%%ListInfo struct {%%COL-LIST-FOR-LIST%%%%RL-FIELDS-IN-LISTINFO%%
 }
 
 func (h *Handler) To%%TABLE-NAME-STRUCT%%ListInfo(ctx context.Context, objs []*biz.%%TABLE-NAME-STRUCT%%ListBO) ([]*%%TABLE-NAME-STRUCT%%ListInfo, error) {
 	list := make([]*%%TABLE-NAME-STRUCT%%ListInfo, 0, len(objs))
 	for i := range objs {
-		%%PREPARE-ASSIGN-BO-FOR-LIST%% list = append(list, &%%TABLE-NAME-STRUCT%%ListInfo{%%ASSIGN-BO-FOR-LIST%%
+		%%PREPARE-ASSIGN-BO-FOR-LIST%%%%RL-CONVERT-IN-TO-LISTINFO%% list = append(list, &%%TABLE-NAME-STRUCT%%ListInfo{%%ASSIGN-BO-FOR-LIST%%%%RL-FIELDS-ASSIGN-IN-LISTINFO%%
 		})
 	}
 	return list, nil
@@ -196,14 +198,18 @@ import (
 	"%%GO-MODULE%%/internal/common/cerror"
 )
 
+%%RL-DETAIL-STRUCTS%%
+
 // %%TABLE-COMMENT%%详情
-type %%TABLE-NAME-STRUCT%%Detail struct {%%COL-LIST-IN-VO%%
+type %%TABLE-NAME-STRUCT%%Detail struct {%%COL-LIST-IN-VO%%%%RL-FIELDS-IN-DETAIL%%
 }
 
 func (h *Handler) To%%TABLE-NAME-STRUCT%%Detail(ctx context.Context, bo *biz.%%TABLE-NAME-STRUCT%%BO) (*%%TABLE-NAME-STRUCT%%Detail, error) {
-	%%PREPARE-ASSIGN-BO-TO-VO%% return &%%TABLE-NAME-STRUCT%%Detail{%%ASSIGN-BO-TO-VO%%
+	%%PREPARE-ASSIGN-BO-TO-VO%% %%RL-CONVERT-IN-TO-DETAIL%% return &%%TABLE-NAME-STRUCT%%Detail{%%ASSIGN-BO-TO-VO%%%%RL-FIELDS-ASSIGN-IN-DETAIL%%
 	}, nil
 }
+
+%%RL-REQUEST-STRUCTS%%
 
 %%TPL-HTTP-HANDLER-CREATE%%
 
@@ -240,4 +246,106 @@ func (h *Handler) Get%%TABLE-NAME-STRUCT%%Detail(c *gin.Context) {
 %%TPL-HTTP-HANDLER-GET-LIST%%
 %%TPL-HTTP-HANDLER-UPDATE%%
 %%TPL-HTTP-HANDLER-DELETE%%
+
+%%RL-HANDLER-FUNCTIONS%%
 `
+
+// RL表操作函数模板
+var TplRLHandlerAdd string = `
+// @Id			Add%%RL-TABLE-NAME-STRUCT%%
+// @Tags		%%TABLE-COMMENT%%
+// @Summary	添加%%RL-TABLE-COMMENT%%
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string			true	"Bearer <jwt-token>"
+// @Param		%%TABLE-NAME-VAR%%_id			path		int				true	"%%TABLE-COMMENT%%ID"
+// @Param		body			body		ReqCreate%%RL-TABLE-NAME-STRUCT%%	true	"%%RL-TABLE-COMMENT%%"
+// @Success	200				{object}	RspData{data=%%RL-TABLE-NAME-STRUCT%%Detail}
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%%TABLE-NAME-URI%%/{%%TABLE-NAME-VAR%%_id}/%%RL-TABLE-NAME-URI%% [post]
+func (h *Handler) Add%%RL-TABLE-NAME-STRUCT%%(c *gin.Context) {
+	%%TABLE-NAME-VAR%%Id := jgstr.UintVal(c.Param("%%TABLE-NAME-VAR%%_id"))
+	var req ReqCreate%%RL-TABLE-NAME-STRUCT%%
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%%TABLE-NAME-VAR%%_id", %%TABLE-NAME-VAR%%Id).
+		WithField("req", jgstr.JsonEncode(req))
+
+	%%RL-TABLE-NAME-VAR%%BO := &biz.%%RL-TABLE-NAME-STRUCT%%BO{%%RL-BO-ASSIGN%%
+	}
+	err = h.BizService.Add%%RL-TABLE-NAME-STRUCT%%(ctx, %%TABLE-NAME-VAR%%Id, %%RL-TABLE-NAME-VAR%%BO)
+	if err != nil {
+		log.WithError(err).Error("BizService.Add%%RL-TABLE-NAME-STRUCT%% failed")
+		ResponseFail(c, err)
+		return
+	}
+	d := &%%RL-TABLE-NAME-STRUCT%%Detail{%%RL-DETAIL-ASSIGN%%
+	}
+	ResponseSuccess(c, d)
+}`
+
+var TplRLHandlerRemove string = `
+// @Id			Remove%%RL-TABLE-NAME-STRUCT%%
+// @Tags		%%TABLE-COMMENT%%
+// @Summary	删除%%RL-TABLE-COMMENT%%
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string	true	"Bearer <jwt-token>"
+// @Param		%%TABLE-NAME-VAR%%_id			path		int		true	"%%TABLE-COMMENT%%ID"
+// @Param		%%RL-TABLE-NAME-VAR%%_id			path		int		true	"%%RL-TABLE-COMMENT%%ID"
+// @Success	200				{object}	RspBase
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%%TABLE-NAME-URI%%/{%%TABLE-NAME-VAR%%_id}/%%RL-TABLE-NAME-URI%%/{%%RL-TABLE-NAME-VAR%%_id} [delete]
+func (h *Handler) Remove%%RL-TABLE-NAME-STRUCT%%(c *gin.Context) {
+	%%TABLE-NAME-VAR%%Id := jgstr.UintVal(c.Param("%%TABLE-NAME-VAR%%_id"))
+	%%RL-TABLE-NAME-VAR%%Id := jgstr.UintVal(c.Param("%%RL-TABLE-NAME-VAR%%_id"))
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%%TABLE-NAME-VAR%%_id", %%TABLE-NAME-VAR%%Id).
+		WithField("%%RL-TABLE-NAME-VAR%%_id", %%RL-TABLE-NAME-VAR%%Id)
+	err := h.BizService.Remove%%RL-TABLE-NAME-STRUCT%%(ctx, %%TABLE-NAME-VAR%%Id, %%RL-TABLE-NAME-VAR%%Id)
+	if err != nil {
+		log.WithError(err).Error("BizService.Remove%%RL-TABLE-NAME-STRUCT%% failed")
+		ResponseFail(c, err)
+		return
+	}
+	ResponseSuccess(c, nil)
+}`
+
+var TplRLHandlerGet string = `
+// @Id			GetAll%%RL-TABLE-NAME-STRUCT%%
+// @Tags		%%TABLE-COMMENT%%
+// @Summary	获取所有%%RL-TABLE-COMMENT%%
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string	true	"Bearer <jwt-token>"
+// @Param		%%TABLE-NAME-VAR%%_id			path		int		true	"%%TABLE-COMMENT%%ID"
+// @Success	200				{object}	RspData{data=[]%%RL-TABLE-NAME-STRUCT%%Detail}
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%%TABLE-NAME-URI%%/{%%TABLE-NAME-VAR%%_id}/%%RL-TABLE-NAME-URI%% [get]
+func (h *Handler) GetAll%%RL-TABLE-NAME-STRUCT%%(c *gin.Context) {
+	%%TABLE-NAME-VAR%%Id := jgstr.UintVal(c.Param("%%TABLE-NAME-VAR%%_id"))
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).WithField("%%TABLE-NAME-VAR%%_id", %%TABLE-NAME-VAR%%Id)
+	%%RL-TABLE-NAME-VAR%%BOs, err := h.BizService.GetAll%%RL-TABLE-NAME-STRUCT%%(ctx, %%TABLE-NAME-VAR%%Id)
+	if err != nil {
+		log.WithError(err).Error("BizService.GetAll%%RL-TABLE-NAME-STRUCT%% failed")
+		ResponseFail(c, err)
+		return
+	}
+	list := make([]*%%RL-TABLE-NAME-STRUCT%%Detail, 0, len(%%RL-TABLE-NAME-VAR%%BOs))
+	for _, %%RL-TABLE-NAME-VAR%%BO := range %%RL-TABLE-NAME-VAR%%BOs {
+		detail := &%%RL-TABLE-NAME-STRUCT%%Detail{%%RL-DETAIL-ASSIGN-LOOP%%
+		}
+		list = append(list, detail)
+	}
+	ResponseSuccess(c, list)
+}`

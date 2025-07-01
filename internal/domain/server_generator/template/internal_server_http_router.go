@@ -11,7 +11,7 @@ var TplHTTPRouteMappingForDataTable = `
 	apiGroup.GET("/%%TABLE-NAME-URI%%/:id", handler.Get%%TABLE-NAME-STRUCT%%Detail)
 	apiGroup.GET("/%%TABLE-NAME-URI%%", handler.Get%%TABLE-NAME-STRUCT%%List)
 	apiGroup.PUT("/%%TABLE-NAME-URI%%/:id", handler.Update%%TABLE-NAME-STRUCT%%)
-	apiGroup.DELETE("/%%TABLE-NAME-URI%%/:id", handler.Delete%%TABLE-NAME-STRUCT%%)
+	apiGroup.DELETE("/%%TABLE-NAME-URI%%/:id", handler.Delete%%TABLE-NAME-STRUCT%%)%%RL-HTTP-ROUTES%%
 `
 
 var TplHTTPRouteMappingForMetaTable = `
@@ -55,3 +55,11 @@ func (s *Server) initRouter() {
 var TplHTTPRouterUseAuthHandler string = `// skip authHandler for some path
 skipFullPath := map[string]struct{}{}
 apiGroup.Use(authHandler(s.Resource.AccessToken, s.Cfg, skipFullPath))`
+
+// RL表HTTP路由模板
+var TplHTTPRLRoutes = `
+	// %%MAIN-TABLE-COMMENT%%%%RL-TABLE-COMMENT%%
+	apiGroup.POST("/%%MAIN-TABLE-NAME-URI%%/:%%MAIN-TABLE-NAME%%_id/%%RL-TABLE-NAME-URI%%", handler.Add%%RL-TABLE-NAME-STRUCT%%)
+	apiGroup.DELETE("/%%MAIN-TABLE-NAME-URI%%/:%%MAIN-TABLE-NAME%%_id/%%RL-TABLE-NAME-URI%%/:%%RL-TABLE-NAME%%_id", handler.Remove%%RL-TABLE-NAME-STRUCT%%)
+	apiGroup.GET("/%%MAIN-TABLE-NAME-URI%%/:%%MAIN-TABLE-NAME%%_id/%%RL-TABLE-NAME-URI%%", handler.GetAll%%RL-TABLE-NAME-STRUCT%%)
+`

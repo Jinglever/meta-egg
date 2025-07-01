@@ -199,6 +199,8 @@ func genHTTPRouteMapping(code *string, project *model.Project) {
 			if table.Type == model.TableType_DATA {
 				str := template.TplHTTPRouteMappingForDataTable
 				replaceTplForTable(&str, table)
+				// 添加RL表路由
+				genRLHTTPRoutes(&str, table, project)
 				buf.WriteString(str)
 			} else if table.Type == model.TableType_META {
 				str := template.TplHTTPRouteMappingForMetaTable
@@ -245,4 +247,49 @@ func genHTTPMiddleware(code *string, project *model.Project) {
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_HTTP_AUTH_HANDLER, template.TplFuncHTTPAuthHandler)
 	}
+}
+
+func genRLHTTPRoutes(code *string, mainTable *model.Table, project *model.Project) {
+	if mainTable.Type != model.TableType_DATA {
+		*code = strings.ReplaceAll(*code, template.PH_RL_HTTP_ROUTES, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, table := range project.Database.Tables {
+		tableNameToTable[table.Name] = table
+	}
+
+	// 获取该主表的所有RL表
+	var rlTables []*model.Table
+	for _, table := range project.Database.Tables {
+		if table.Type == model.TableType_RL {
+			// 查找指向主表的外键
+			identifiedMainTable := helper.IdentifyRLMainTable(table, tableNameToTable)
+			if identifiedMainTable != nil && identifiedMainTable.Name == mainTable.Name {
+				rlTables = append(rlTables, table)
+			}
+		}
+	}
+
+	// 生成RL表路由
+	var buf strings.Builder
+	for _, rlTable := range rlTables {
+		str := template.TplHTTPRLRoutes
+		replaceTplForRLRoute(&str, mainTable, rlTable)
+		buf.WriteString(str)
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_HTTP_ROUTES, buf.String())
+}
+
+// replaceTplForRLRoute 为RL表路由替换占位符
+func replaceTplForRLRoute(code *string, mainTable *model.Table, rlTable *model.Table) {
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_COMMENT, mainTable.Comment)
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_NAME_URI, helper.GetURIName(mainTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_NAME, strings.ToLower(mainTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME_STRUCT, helper.GetStructName(rlTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME_URI, helper.GetURIName(rlTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME, strings.ToLower(rlTable.Name))
 }

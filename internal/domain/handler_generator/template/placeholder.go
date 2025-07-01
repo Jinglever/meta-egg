@@ -56,6 +56,7 @@ const (
 	PH_ASSIGN_FILTER_TO_OPTION_GRPC         = "%%ASSIGN-FILTER-TO-OPTION-GRPC%%"
 	PH_PREPARE_ASSIGN_UPDATE_TO_SET_GRPC    = "%%PREPARE-ASSIGN-UPDATE-TO-SET-GRPC%%"
 	PH_ASSIGN_UPDATE_TO_SET_GRPC            = "%%ASSIGN-UPDATE-TO-SET-GRPC%%"
+	PH_PREPARE_ASSIGN_BO_TO_VO_GRPC         = "%%PREPARE-ASSIGN-BO-TO-VO-GRPC%%"
 
 	PH_TPL_GRPC_HANDLER_CREATE   = "%%TPL-GRPC-HANDLER-CREATE%%"
 	PH_TPL_GRPC_HANDLER_GET_LIST = "%%TPL-GRPC-HANDLER-GET-LIST%%"
@@ -66,4 +67,38 @@ const (
 	PH_TPL_HTTP_HANDLER_GET_LIST = "%%TPL-HTTP-HANDLER-GET-LIST%%"
 	PH_TPL_HTTP_HANDLER_UPDATE   = "%%TPL-HTTP-HANDLER-UPDATE%%"
 	PH_TPL_HTTP_HANDLER_DELETE   = "%%TPL-HTTP-HANDLER-DELETE%%"
+
+	// RL table related placeholders for HTTP handlers
+	PH_RL_DETAIL_STRUCTS            = "%%RL-DETAIL-STRUCTS%%"            // RL表Detail结构体定义
+	PH_RL_REQUEST_STRUCTS           = "%%RL-REQUEST-STRUCTS%%"           // RL表Request结构体定义
+	PH_RL_LISTINFO_STRUCTS          = "%%RL-LISTINFO-STRUCTS%%"          // RL表ListInfo结构体定义
+	PH_RL_FIELDS_IN_DETAIL          = "%%RL-FIELDS-IN-DETAIL%%"          // 主表Detail中的RL字段
+	PH_RL_CONVERT_IN_TO_DETAIL      = "%%RL-CONVERT-IN-TO-DETAIL%%"      // ToDetail函数中的RL转换
+	PH_RL_FIELDS_ASSIGN_IN_DETAIL   = "%%RL-FIELDS-ASSIGN-IN-DETAIL%%"   // ToDetail函数中的RL字段赋值
+	PH_RL_FIELDS_IN_CREATE          = "%%RL-FIELDS-IN-CREATE%%"          // 主表ReqCreate中的RL字段
+	PH_RL_CREATE_ASSIGN_TO_BO       = "%%RL-CREATE-ASSIGN-TO-BO%%"       // Create转BO时的RL字段赋值
+	PH_RL_FIELDS_IN_LISTINFO        = "%%RL-FIELDS-IN-LISTINFO%%"        // 主表ListInfo中的RL字段
+	PH_RL_CONVERT_IN_TO_LISTINFO    = "%%RL-CONVERT-IN-TO-LISTINFO%%"    // ToListInfo函数中的RL转换
+	PH_RL_FIELDS_ASSIGN_IN_LISTINFO = "%%RL-FIELDS-ASSIGN-IN-LISTINFO%%" // ToListInfo函数中的RL字段赋值
+	PH_RL_HANDLER_FUNCTIONS         = "%%RL-HANDLER-FUNCTIONS%%"         // RL表操作函数定义
+
+	// RL table related placeholders for gRPC handlers
+	PH_RL_CONVERT_IN_TO_DETAIL_GRPC      = "%%RL-CONVERT-IN-TO-DETAIL-GRPC%%"      // gRPC ToDetail函数中的RL转换
+	PH_RL_FIELDS_ASSIGN_IN_DETAIL_GRPC   = "%%RL-FIELDS-ASSIGN-IN-DETAIL-GRPC%%"   // gRPC ToDetail函数中的RL字段赋值
+	PH_RL_CREATE_ASSIGN_TO_BO_GRPC       = "%%RL-CREATE-ASSIGN-TO-BO-GRPC%%"       // gRPC Create转BO时的RL字段赋值
+	PH_RL_CONVERT_IN_TO_LISTINFO_GRPC    = "%%RL-CONVERT-IN-TO-LISTINFO-GRPC%%"    // gRPC ToListInfo函数中的RL转换
+	PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC = "%%RL-FIELDS-ASSIGN-IN-LISTINFO-GRPC%%" // gRPC ToListInfo函数中的RL字段赋值
+	PH_RL_GRPC_HANDLER_FUNCTIONS         = "%%RL-GRPC-HANDLER-FUNCTIONS%%"         // gRPC RL表操作函数定义
+
+	// RL表模板相关的占位符
+	PH_RL_TABLE_NAME_STRUCT       = "%%RL-TABLE-NAME-STRUCT%%"       // RL表结构体名
+	PH_RL_TABLE_NAME_VAR          = "%%RL-TABLE-NAME-VAR%%"          // RL表变量名
+	PH_RL_TABLE_NAME_URI          = "%%RL-TABLE-NAME-URI%%"          // RL表URI名
+	PH_RL_TABLE_COMMENT           = "%%RL-TABLE-COMMENT%%"           // RL表注释
+	PH_RL_BO_ASSIGN               = "%%RL-BO-ASSIGN%%"               // RL BO字段赋值
+	PH_RL_DETAIL_ASSIGN           = "%%RL-DETAIL-ASSIGN%%"           // RL Detail字段赋值
+	PH_RL_DETAIL_ASSIGN_LOOP      = "%%RL-DETAIL-ASSIGN-LOOP%%"      // RL Detail字段赋值（循环中）
+	PH_RL_BO_ASSIGN_GRPC          = "%%RL-BO-ASSIGN-GRPC%%"          // gRPC RL BO字段赋值
+	PH_RL_DETAIL_ASSIGN_GRPC      = "%%RL-DETAIL-ASSIGN-GRPC%%"      // gRPC RL Detail字段赋值
+	PH_RL_DETAIL_ASSIGN_LOOP_GRPC = "%%RL-DETAIL-ASSIGN-LOOP-GRPC%%" // gRPC RL Detail字段赋值（循环中）
 )

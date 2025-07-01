@@ -201,6 +201,19 @@ func (d *Database) Validate() error {
 			return fmt.Errorf("ri table (%s) has no ri foreign key", table.Name)
 		}
 
+		// RL表验证
+		if table.Type == TableType_RL {
+			mainTable := identifyRLMainTable(table, tableNameToTable)
+			if mainTable == nil {
+				log.Errorf("rl table (%s) has no valid foreign key reference to main table", table.Name)
+				return fmt.Errorf("rl table (%s) has no valid foreign key reference to main table", table.Name)
+			}
+			if mainTable.Type != TableType_DATA {
+				log.Errorf("rl table (%s) main table (%s) must be DATA type, but got %s", table.Name, mainTable.Name, mainTable.Type)
+				return fmt.Errorf("rl table (%s) main table (%s) must be DATA type, but got %s", table.Name, mainTable.Name, mainTable.Type)
+			}
+		}
+
 		// todo 检查外链和索引是否有重复
 		// todo 检查联合索引和联合唯一索引是否有重复
 	}
@@ -406,5 +419,51 @@ func (ic *IndexColumn) Validate() error {
 		log.Errorf("index column name is empty")
 		return fmt.Errorf("index column name is empty")
 	}
+	return nil
+}
+
+// identifyRLMainTable 通过外键自动识别RL表的主表
+func identifyRLMainTable(rlTable *Table, tableNameToTable map[string]*Table) *Table {
+	var dataTypeKeys []*ForeignKey
+	var mainMarkedKey *ForeignKey
+
+	// 收集所有外键信息
+	for _, column := range rlTable.Columns {
+		for _, fk := range column.ForeignKeys {
+			if fk.IsMain {
+				if mainMarkedKey != nil {
+					// 错误：多个主外键标记
+					log.Errorf("rl table (%s) has multiple foreign keys marked as main", rlTable.Name)
+					return nil
+				}
+				mainMarkedKey = fk
+			}
+			if mainTable := tableNameToTable[fk.Table]; mainTable != nil && mainTable.Type == TableType_DATA {
+				dataTypeKeys = append(dataTypeKeys, fk)
+			}
+		}
+	}
+
+	// 如果有明确的主外键标记，使用它
+	if mainMarkedKey != nil {
+		if mainTable := tableNameToTable[mainMarkedKey.Table]; mainTable != nil && mainTable.Type == TableType_DATA {
+			return mainTable
+		}
+		log.Errorf("rl table (%s) main foreign key points to non-DATA table (%s)", rlTable.Name, mainMarkedKey.Table)
+		return nil
+	}
+
+	// 如果只有一个DATA类型外键，自动识别
+	if len(dataTypeKeys) == 1 {
+		return tableNameToTable[dataTypeKeys[0].Table]
+	}
+
+	// 如果有多个DATA类型外键但没有明确标记，报错
+	if len(dataTypeKeys) > 1 {
+		log.Errorf("rl table (%s) has multiple foreign keys to DATA tables, please mark one as is_main=\"true\"", rlTable.Name)
+		return nil
+	}
+
+	// 没有任何DATA类型外键
 	return nil
 }

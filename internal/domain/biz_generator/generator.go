@@ -114,16 +114,22 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, template.TplFuncGetList)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_UPDATE, template.TplFuncUpdate)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, template.TplFuncDelete)
+		// Generate RL table related code for DATA tables
+		genRLBizMethods(code, table)
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, template.TplFuncGetList)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_UPDATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, "")
+		// Clear RL placeholders for non-DATA tables
+		clearRLPlaceholders(code)
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_UPDATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, "")
+		// Clear RL placeholders for non-DATA tables
+		clearRLPlaceholders(code)
 	}
 
 	genErrorDuplicateKey(code, table)
@@ -544,4 +550,355 @@ func genColListToSelectForList(code *string, table *model.Table) {
 		))
 	}
 	*code = strings.ReplaceAll(*code, template.PH_COL_LIST_TO_SELECT_FOR_LIST, buf.String())
+}
+
+func genRLBizMethods(code *string, table *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前主表的所有RL表
+	rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+
+	if len(rlTables) == 0 {
+		clearRLPlaceholders(code)
+		return
+	}
+
+	var boDefinitionsBuf, listBoDefinitionsBuf, boFieldsBuf, listBoFieldsBuf, assignModelToBOBuf, assignModelToListBOBuf, methodsBuf strings.Builder
+
+	// 生成RL表的BO结构定义
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		boDefinitionsBuf.WriteString(fmt.Sprintf(`type %sBO struct {%s
+}
+
+`, rlStructName, generateRLBOFields(rlTable)))
+
+		// 生成RL表的ListBO结构定义（仅当有list字段时）
+		if helper.ShouldIncludeRLInList(rlTable) {
+			listBoDefinitionsBuf.WriteString(fmt.Sprintf(`type %sListBO struct {%s
+}
+
+`, rlStructName, generateRLListBOFields(rlTable)))
+		}
+	}
+
+	// 生成BO字段定义
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+
+		// 为详情BO添加RL表字段（总是包含）
+		boFieldsBuf.WriteString(fmt.Sprintf("\t%ss []*%sBO `json:\"%ss,omitempty\"`\n",
+			rlStructName, rlStructName, helper.GetVarName(rlTable.Name)))
+
+		// 为列表BO添加RL表字段（仅当有list字段时，使用ListBO）
+		if helper.ShouldIncludeRLInList(rlTable) {
+			listBoFieldsBuf.WriteString(fmt.Sprintf("\t%ss []*%sListBO `json:\"%ss,omitempty\"`\n",
+				rlStructName, rlStructName, helper.GetVarName(rlTable.Name)))
+		}
+	}
+
+	// 生成Model到BO的转换逻辑
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlFieldName := rlStructName + "s"
+
+		// 详情BO转换（总是包含）
+		assignModelToBOBuf.WriteString(fmt.Sprintf(`
+		%s: func() []*%sBO {
+			result := make([]*%sBO, len(m.%s))
+			for i, rl := range m.%s {
+				result[i] = &%sBO{%s}
+			}
+			return result
+		}(),`, rlFieldName, rlStructName, rlStructName, rlFieldName, rlFieldName, rlStructName,
+			generateRLBOAssignment(rlTable)))
+
+		// 列表BO转换（仅当有list字段时，使用ListBO）
+		if helper.ShouldIncludeRLInList(rlTable) {
+			assignModelToListBOBuf.WriteString(fmt.Sprintf(`
+			%s: func() []*%sListBO {
+				result := make([]*%sListBO, len(ms[i].%s))
+				for j, rl := range ms[i].%s {
+					result[j] = &%sListBO{%s}
+				}
+				return result
+			}(),`, rlFieldName, rlStructName, rlStructName, rlFieldName, rlFieldName, rlStructName,
+				generateRLListBOAssignment(rlTable)))
+		}
+	}
+
+	// 生成RL表业务方法
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		mainTableStructName := helper.GetStructName(table.Name)
+
+		// 生成Add方法
+		methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Add%s(ctx context.Context, mainId uint64, data *%sBO) error {
+	log := contexts.GetLogger(ctx).
+		WithField("mainId", mainId).
+		WithField("data", jgstr.JsonEncode(data))
+	
+	rl := &model.%s{%s
+	}
+	
+	err := b.%sRepo.Add%s(ctx, mainId, rl)
+	if err != nil {
+		log.WithError(err).Error("fail to add %s")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, rlStructName, rlStructName, rlStructName,
+			generateBOToModelAssignment(rlTable), mainTableStructName, rlStructName, rlTable.Name))
+
+		// 生成Remove方法
+		methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Remove%s(ctx context.Context, mainId uint64, rlId uint64) error {
+	log := contexts.GetLogger(ctx).
+		WithField("mainId", mainId).
+		WithField("rlId", rlId)
+	
+	err := b.%sRepo.Remove%s(ctx, mainId, rlId)
+	if err != nil {
+		log.WithError(err).Error("fail to remove %s")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, rlStructName, mainTableStructName, rlStructName, rlTable.Name))
+
+		// 生成Get方法
+		methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) GetAll%s(ctx context.Context, mainId uint64) ([]*%sBO, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("mainId", mainId)
+	
+	rls, err := b.%sRepo.GetAll%s(ctx, mainId)
+	if err != nil {
+		log.WithError(err).Error("fail to get all %s")
+		return nil, cerror.Internal(err.Error())
+	}
+	
+	result := make([]*%sBO, len(rls))
+	for i, rl := range rls {
+		result[i] = &%sBO{%s}
+	}
+	return result, nil
+}
+`, rlStructName, rlStructName, mainTableStructName, rlStructName,
+			rlTable.Name, rlStructName, rlStructName, generateRLBOAssignment(rlTable)))
+	}
+
+	// 生成事务中的RL表创建逻辑
+	createInTransactionCode := generateRLCreateInTransaction(table)
+
+	// 生成级联删除逻辑
+	cascadeDeleteCode := generateRLCascadeDeleteInBiz(table)
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_RL_BO_DEFINITIONS, boDefinitionsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_LIST_BO_DEFINITIONS, listBoDefinitionsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_BO_FIELDS, boFieldsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_LIST_BO_FIELDS, listBoFieldsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_ASSIGN_MODEL_TO_BO, assignModelToBOBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_ASSIGN_MODEL_TO_LIST_BO, assignModelToListBOBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_IN_TRANSACTION, createInTransactionCode)
+	*code = strings.ReplaceAll(*code, template.PH_RL_CASCADE_DELETE_IN_BIZ, cascadeDeleteCode)
+	*code = strings.ReplaceAll(*code, template.PH_RL_METHODS, methodsBuf.String())
+}
+
+func clearRLPlaceholders(code *string) {
+	*code = strings.ReplaceAll(*code, template.PH_RL_BO_DEFINITIONS, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_LIST_BO_DEFINITIONS, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_BO_FIELDS, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_LIST_BO_FIELDS, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_ASSIGN_MODEL_TO_BO, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_ASSIGN_MODEL_TO_LIST_BO, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_IN_TRANSACTION, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_CASCADE_DELETE_IN_BIZ, "")
+	*code = strings.ReplaceAll(*code, template.PH_RL_METHODS, "")
+}
+
+func generateRLBOFields(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsHidden {
+			continue
+		}
+
+		gotype, err := helper.GetGoType(col)
+		if err != nil {
+			continue
+		}
+
+		// 处理必填性：如果字段不是必填的且Go类型不是可空的，则添加指针
+		if !col.IsRequired && !helper.IsGoTypeNullable(gotype) {
+			gotype = "*" + gotype
+		}
+
+		jsonTag := helper.GetVarName(col.Name)
+		comment := col.Comment
+		buf.WriteString(fmt.Sprintf("\n\t%s %s `json:\"%s\"` // %s",
+			helper.GetTableColName(col.Name), gotype, jsonTag, comment))
+	}
+	return buf.String()
+}
+
+func generateRLBOAssignment(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsHidden {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: rl.%s,",
+			helper.GetTableColName(col.Name), helper.GetTableColName(col.Name)))
+	}
+	return buf.String()
+}
+
+func generateBOToModelAssignment(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsPrimaryKey {
+			continue // 主键通常由数据库自动生成
+		}
+		if col.IsHidden {
+			continue
+		}
+		if !col.IsAlterable {
+			continue // 只考虑alter=true的字段
+		}
+
+		// 跳过主外键字段，这些会由repo层自动处理
+		isMainForeignKey := false
+		for _, fk := range col.ForeignKeys {
+			if fk.IsMain {
+				isMainForeignKey = true
+				break
+			}
+		}
+		if !isMainForeignKey {
+			buf.WriteString(fmt.Sprintf("\n\t\t%s: data.%s,",
+				helper.GetTableColName(col.Name), helper.GetTableColName(col.Name)))
+		}
+	}
+	return buf.String()
+}
+
+func generateRLListBOFields(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsHidden {
+			continue
+		}
+		if !col.IsList {
+			continue // 只包含list=true的字段
+		}
+
+		gotype, err := helper.GetGoType(col)
+		if err != nil {
+			continue
+		}
+
+		// 处理必填性：如果字段不是必填的且Go类型不是可空的，则添加指针
+		if !col.IsRequired && !helper.IsGoTypeNullable(gotype) {
+			gotype = "*" + gotype
+		}
+
+		jsonTag := helper.GetVarName(col.Name)
+		comment := col.Comment
+		buf.WriteString(fmt.Sprintf("\n\t%s %s `json:\"%s\"` // %s",
+			helper.GetTableColName(col.Name), gotype, jsonTag, comment))
+	}
+	return buf.String()
+}
+
+func generateRLListBOAssignment(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsHidden {
+			continue
+		}
+		if !col.IsList {
+			continue // 只包含list=true的字段
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: rl.%s,",
+			helper.GetTableColName(col.Name), helper.GetTableColName(col.Name)))
+	}
+	return buf.String()
+}
+
+func generateRLCreateInTransaction(table *model.Table) string {
+	var buf strings.Builder
+	rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlFieldName := rlStructName + "s"
+
+		buf.WriteString(fmt.Sprintf(`
+		// 创建%s数据
+		for _, data := range obj.%s {
+			rlModel := &model.%s{%s
+			}
+			err = b.%sRepo.Add%s(txCtx, m.ID, rlModel)
+			if err != nil {
+				log.WithError(err).Error("fail to add %s")
+				return cerror.Internal(err.Error())
+			}
+			// 将新创建的RL记录添加到主表model中，确保返回的BO包含完整数据
+			m.%s = append(m.%s, rlModel)
+		}`, rlTable.Comment, rlFieldName, rlStructName,
+			generateBOToModelAssignment(rlTable), helper.GetStructName(table.Name), rlStructName,
+			rlTable.Name, rlFieldName, rlFieldName))
+	}
+
+	return buf.String()
+}
+
+func generateRLCascadeDeleteInBiz(table *model.Table) string {
+	var buf strings.Builder
+	rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+	mainTableStructName := helper.GetStructName(table.Name)
+
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+
+		// 检查是否有设置auto_remove的外键
+		hasAutoRemove := false
+		for _, column := range rlTable.Columns {
+			for _, fk := range column.ForeignKeys {
+				if fk.Table == table.Name && fk.AutoRemove {
+					hasAutoRemove = true
+					break
+				}
+			}
+			if hasAutoRemove {
+				break
+			}
+		}
+
+		// 只处理设置了auto_remove的RL表
+		if !hasAutoRemove {
+			continue
+		}
+
+		buf.WriteString(fmt.Sprintf(`
+		// 级联删除%s
+		err = b.%sRepo.RemoveAll%s(txCtx, id)
+		if err != nil {
+			log.WithError(err).Error("fail to remove %ss")
+			return cerror.Internal(err.Error())
+		}`,
+			rlTable.Comment,
+			mainTableStructName, rlStructName,
+			helper.GetVarName(rlTable.Name)))
+	}
+
+	return buf.String()
 }

@@ -22,4 +22,17 @@ const (
 	PH_COL_LIST_FOR_UPDATE = "%%COL-LIST-FOR-UPDATE%%"
 	PH_IMPORT_FOR_MESSAGE  = "%%IMPORT-FOR-MESSAGE%%"
 	PH_IMPORT_TABLE_PROTO  = "%%IMPORT-TABLE-PROTO%%" // e.g. import "account.proto";
+
+	// RL table related placeholders
+	PH_RL_FIELDS_IN_DETAIL    = "%%RL-FIELDS-IN-DETAIL%%"    // RL表字段在Detail消息中
+	PH_RL_FIELDS_IN_LIST      = "%%RL-FIELDS-IN-LIST%%"      // RL表字段在ListInfo消息中
+	PH_RL_MESSAGES            = "%%RL-MESSAGES%%"            // RL表相关的消息定义
+	PH_RL_HANDLER_FUNCTIONS   = "%%RL-HANDLER-FUNCTIONS%%"   // RL表相关的gRPC方法定义
+	PH_RL_TABLE_NAME_STRUCT   = "%%RL-TABLE-NAME-STRUCT%%"   // RL表结构体名
+	PH_RL_TABLE_COMMENT       = "%%RL-TABLE-COMMENT%%"       // RL表注释
+	PH_MAIN_TABLE_NAME_STRUCT = "%%MAIN-TABLE-NAME-STRUCT%%" // 主表结构体名
+	PH_MAIN_TABLE_COMMENT     = "%%MAIN-TABLE-COMMENT%%"     // 主表注释
+	PH_MAIN_TABLE_NAME_LOWER  = "%%MAIN-TABLE-NAME-LOWER%%"  // 主表名小写
+	PH_RL_TABLE_NAME_LOWER    = "%%RL-TABLE-NAME-LOWER%%"    // RL表名小写
+	PH_RL_FIELDS_IN_CREATE    = "%%RL-FIELDS-IN-CREATE%%"    // RL表字段在Create请求中
 )

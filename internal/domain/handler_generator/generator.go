@@ -169,6 +169,10 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_GET_LIST, template.TplHTTPHandlerGetList)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_UPDATE, template.TplHTTPHandlerUpdate)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_DELETE, template.TplHTTPHandlerDelete)
+
+		// 生成RL表相关内容
+		genRLDetailStructsAndFields(code, table)
+		genRLGRPCHandlerFunctions(code, table)
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, template.TplGRPCHandlerGetList)
@@ -179,6 +183,27 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_GET_LIST, template.TplHTTPHandlerGetList)
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_UPDATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_DELETE, "")
+
+		// META表不需要RL表支持
+		*code = strings.ReplaceAll(*code, template.PH_RL_DETAIL_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_REQUEST_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_LISTINFO_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_CREATE, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_HANDLER_FUNCTIONS, "")
+		// gRPC RL表相关占位符清理
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, "")
@@ -189,6 +214,27 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_GET_LIST, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_UPDATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_HTTP_HANDLER_DELETE, "")
+
+		// 其他表类型不需要RL表支持
+		*code = strings.ReplaceAll(*code, template.PH_RL_DETAIL_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_REQUEST_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_LISTINFO_STRUCTS, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_CREATE, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_HANDLER_FUNCTIONS, "")
+		// gRPC RL表相关占位符清理
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
 	}
 
 	genAssignBOToVOGRPC(code, table)
@@ -550,7 +596,7 @@ func genAssignBOToVOGRPC(code *string, table *model.Table) {
 			}
 		}
 	}
-	*code = strings.ReplaceAll(*code, template.PH_PREPARE_ASSIGN_BO_TO_VO, bufPrepare.String())
+	*code = strings.ReplaceAll(*code, template.PH_PREPARE_ASSIGN_BO_TO_VO_GRPC, bufPrepare.String())
 	*code = strings.ReplaceAll(*code, template.PH_ASSIGN_BO_TO_VO_GRPC, buf.String())
 }
 
@@ -788,6 +834,17 @@ func genAssignCreateToBO(code *string, table *model.Table) {
 			))
 		}
 	}
+
+	// 为DATA表添加RL字段的赋值
+	if table.Type == model.TableType_DATA {
+		rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+		for _, rlTable := range rlTables {
+			rlVarName := helper.GetVarName(rlTable.Name)
+			rlStructName := helper.GetStructName(rlTable.Name)
+			buf.WriteString(fmt.Sprintf("\n%ss: %ss,", rlStructName, rlVarName))
+		}
+	}
+
 	*code = strings.ReplaceAll(*code, template.PH_PREPARE_ASSIGN_CREATE_TO_BO, bufPrepare.String())
 	*code = strings.ReplaceAll(*code, template.PH_ASSIGN_CREATE_TO_BO, buf.String())
 }
@@ -894,6 +951,17 @@ func genAssignCreateToBOGRPC(code *string, table *model.Table) {
 			}
 		}
 	}
+
+	// 为DATA表添加RL字段的赋值
+	if table.Type == model.TableType_DATA {
+		rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+		for _, rlTable := range rlTables {
+			rlVarName := helper.GetVarName(rlTable.Name)
+			rlStructName := helper.GetStructName(rlTable.Name)
+			buf.WriteString(fmt.Sprintf("\n%ss: %ss,", rlStructName, rlVarName))
+		}
+	}
+
 	*code = strings.ReplaceAll(*code, template.PH_PREPARE_ASSIGN_CREATE_TO_BO_GRPC, bufPrepare.String())
 	*code = strings.ReplaceAll(*code, template.PH_ASSIGN_CREATE_TO_BO_GRPC, buf.String())
 }
@@ -1625,4 +1693,941 @@ func genAssignUpdateToSetGRPC(code *string, table *model.Table) {
 	}
 	*code = strings.ReplaceAll(*code, template.PH_PREPARE_ASSIGN_UPDATE_TO_SET_GRPC, bufPrepare.String())
 	*code = strings.ReplaceAll(*code, template.PH_ASSIGN_UPDATE_TO_SET_GRPC, buf.String())
+}
+
+// genRLDetailStructsAndFields 为主表生成RL表相关的结构体和字段
+func genRLDetailStructsAndFields(code *string, mainTable *model.Table) {
+	project := mainTable.Database.Project
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, table := range project.Database.Tables {
+		tableNameToTable[table.Name] = table
+	}
+
+	// 获取该主表的所有RL表
+	var rlTables []*model.Table
+	for _, table := range project.Database.Tables {
+		if table.Type == model.TableType_RL {
+			// 查找指向主表的外键
+			identifiedMainTable := helper.IdentifyRLMainTable(table, tableNameToTable)
+			if identifiedMainTable != nil && identifiedMainTable.Name == mainTable.Name {
+				rlTables = append(rlTables, table)
+			}
+		}
+	}
+
+	// 1. 生成RL表Detail结构体定义
+	var rlDetailBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlDetailBuf.WriteString(fmt.Sprintf("// %s详情\n", rlTable.Comment))
+		rlDetailBuf.WriteString(fmt.Sprintf("type %sDetail struct {\n", helper.GetStructName(rlTable.Name)))
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			goType, err := helper.GetGoType(col)
+			if err != nil {
+				log.Fatalf("fail to get go type: %v", err)
+			}
+
+			// 处理时间类型
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+				goType = "string"
+			}
+
+			if !col.IsRequired && !helper.IsGoTypeNullable(goType) {
+				goType = "*" + goType
+			}
+
+			comment := col.Comment
+			if !col.IsRequired {
+				comment += " (nullable)"
+			}
+
+			rlDetailBuf.WriteString(fmt.Sprintf("\t%s %s `json:\"%s\"` // %s\n",
+				helper.GetStructName(col.Name),
+				goType,
+				helper.GetDirName(col.Name),
+				comment))
+		}
+		rlDetailBuf.WriteString("}\n\n")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_DETAIL_STRUCTS, rlDetailBuf.String())
+
+	// 1.1 生成RL表Request结构体定义
+	var rlRequestBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlRequestBuf.WriteString(fmt.Sprintf("// %s创建数据\n", rlTable.Comment))
+		rlRequestBuf.WriteString(fmt.Sprintf("type ReqCreate%s struct {\n",
+			helper.GetStructName(rlTable.Name)))
+		for _, col := range rlTable.Columns {
+			if !col.IsAlterable {
+				continue
+			}
+			if col.IsHidden {
+				continue
+			}
+			goType := helper.GetGoTypeForHandler(col)
+			comment := helper.GetCommentForHandler(col)
+			binding := helper.GetBinding(col)
+			rlRequestBuf.WriteString(fmt.Sprintf("\t%s %s `json:\"%s\"%s` // %s\n",
+				helper.GetStructName(col.Name),
+				goType,
+				col.Name,
+				binding,
+				comment))
+		}
+		rlRequestBuf.WriteString("}\n\n")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_REQUEST_STRUCTS, rlRequestBuf.String())
+
+	// 1.2 生成RL表ListInfo结构体定义（只包含list=true字段）
+	var rlListInfoBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlListInfoBuf.WriteString(fmt.Sprintf("// %s列表信息\n", rlTable.Comment))
+		rlListInfoBuf.WriteString(fmt.Sprintf("type %sListInfo struct {\n", helper.GetStructName(rlTable.Name)))
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if !col.IsList {
+				continue
+			}
+
+			goType, err := helper.GetGoType(col)
+			if err != nil {
+				log.Fatalf("fail to get go type: %v", err)
+			}
+
+			// 处理时间类型
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+				goType = "string"
+			}
+
+			if !col.IsRequired && !helper.IsGoTypeNullable(goType) {
+				goType = "*" + goType
+			}
+
+			comment := col.Comment
+			if !col.IsRequired {
+				comment += " (nullable)"
+			}
+
+			rlListInfoBuf.WriteString(fmt.Sprintf("\t%s %s `json:\"%s\"` // %s\n",
+				helper.GetStructName(col.Name),
+				goType,
+				helper.GetDirName(col.Name),
+				comment))
+		}
+		rlListInfoBuf.WriteString("}\n\n")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_LISTINFO_STRUCTS, rlListInfoBuf.String())
+
+	// 2. 生成主表Detail中的RL字段
+	var fieldsBuf strings.Builder
+	for _, rlTable := range rlTables {
+		fieldsBuf.WriteString(fmt.Sprintf("\n\t%ss []*%sDetail `json:\"%ss\"` // %s列表",
+			helper.GetStructName(rlTable.Name),
+			helper.GetStructName(rlTable.Name),
+			helper.GetDirName(rlTable.Name),
+			rlTable.Comment))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_DETAIL, fieldsBuf.String())
+
+	// 3. 生成ToDetail函数中的RL转换逻辑
+	var convertBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		convertBuf.WriteString(fmt.Sprintf("var %ss []*%sDetail\n\t", rlVarName, rlStructName))
+		convertBuf.WriteString(fmt.Sprintf("for _, %sBO := range bo.%ss {\n\t\t", rlVarName, rlStructName))
+		convertBuf.WriteString(fmt.Sprintf("%sDetail := &%sDetail{\n", rlVarName, rlStructName))
+
+		// 为每个RL表字段生成转换逻辑
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				tFormat := "SecondTimeFormat"
+				if col.Type == model.ColumnType_TIME ||
+					col.Type == model.ColumnType_TIMETZ {
+					tFormat = "HourMinuteSecondFormat"
+				} else if col.Type == model.ColumnType_DATE {
+					tFormat = "DateFormat"
+				}
+
+				if !col.IsRequired {
+					convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: nil,\n", helper.GetStructName(col.Name)))
+					// TODO: 处理nullable时间字段的转换
+				} else {
+					convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: %sBO.%s.Format(constraint.%s),\n",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				}
+			} else {
+				convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: %sBO.%s,\n",
+					helper.GetStructName(col.Name),
+					rlVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+
+		convertBuf.WriteString("\t\t}\n\t\t")
+		convertBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sDetail)\n\t", rlVarName, rlVarName, rlVarName))
+		convertBuf.WriteString("}\n\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL, convertBuf.String())
+
+	// 4. 生成主表Detail赋值中的RL字段
+	var assignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		assignBuf.WriteString(fmt.Sprintf("\n\t\t%ss: %ss,", rlStructName, rlVarName))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL, assignBuf.String())
+
+	// 5. 生成主表ReqCreate中的RL字段
+	var createFieldsBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		createFieldsBuf.WriteString(fmt.Sprintf("\n\t%ss []ReqCreate%s `json:\"%ss\"` // %s列表",
+			rlStructName,
+			rlStructName,
+			helper.GetDirName(rlTable.Name),
+			rlTable.Comment))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_CREATE, createFieldsBuf.String())
+
+	// 6. 生成Create转BO时的RL字段赋值
+	var createAssignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		createAssignBuf.WriteString(fmt.Sprintf("var %ss []*biz.%sBO\n\t", rlVarName, rlStructName))
+		createAssignBuf.WriteString(fmt.Sprintf("for _, %sData := range req.%ss {\n\t\t", rlVarName, rlStructName))
+		createAssignBuf.WriteString(fmt.Sprintf("%sBO := &biz.%sBO{\n", rlVarName, rlStructName))
+
+		// 为每个RL表的alter=true字段生成赋值
+		for _, col := range rlTable.Columns {
+			if !col.IsAlterable {
+				continue
+			}
+			if col.IsHidden {
+				continue
+			}
+			createAssignBuf.WriteString(fmt.Sprintf("\t\t\t%s: %sData.%s,\n",
+				helper.GetTableColName(col.Name),
+				rlVarName,
+				helper.GetStructName(col.Name)))
+		}
+
+		createAssignBuf.WriteString("\t\t}\n\t\t")
+		createAssignBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sBO)\n\t", rlVarName, rlVarName, rlVarName))
+		createAssignBuf.WriteString("}\n\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO, createAssignBuf.String())
+
+	// 7. 在主表BO的赋值中添加RL字段 - 这部分由genAssignCreateToBO函数处理
+	// 不需要在这里处理，因为会与genAssignCreateToBO冲突
+
+	// 8. 生成主表ListInfo中的RL字段（只对有list字段的RL表）
+	var rlListInfoFieldsBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlListInfoFieldsBuf.WriteString(fmt.Sprintf("\n\t%ss []*%sListInfo `json:\"%ss\"` // %s列表",
+			rlStructName,
+			rlStructName,
+			helper.GetDirName(rlTable.Name),
+			rlTable.Comment))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_LISTINFO, rlListInfoFieldsBuf.String())
+
+	// 9. 生成ToListInfo函数中的RL转换逻辑
+	var rlListInfoConvertBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("var %ss []*%sListInfo\n\t\t", rlVarName, rlStructName))
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("for _, %sBO := range objs[i].%ss {\n\t\t\t", rlVarName, rlStructName))
+
+		// 检查是否有时间字段需要特殊处理
+		var prepareTimeFields strings.Builder
+		var assignFields strings.Builder
+
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if !col.IsList {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				tFormat := "SecondTimeFormat"
+				if col.Type == model.ColumnType_TIME ||
+					col.Type == model.ColumnType_TIMETZ {
+					tFormat = "HourMinuteSecondFormat"
+				} else if col.Type == model.ColumnType_DATE {
+					tFormat = "DateFormat"
+				}
+
+				if !col.IsRequired {
+					prepareTimeFields.WriteString(fmt.Sprintf("var %s *string\n\t\t\t", helper.GetVarName(col.Name)))
+					prepareTimeFields.WriteString(fmt.Sprintf("if %sBO.%s != nil {\n\t\t\t\t", rlVarName, helper.GetTableColName(col.Name)))
+					prepareTimeFields.WriteString(fmt.Sprintf("*%s = %sBO.%s.Format(constraint.%s)\n\t\t\t",
+						helper.GetVarName(col.Name), rlVarName, helper.GetTableColName(col.Name), tFormat))
+					prepareTimeFields.WriteString("}\n\t\t\t")
+					assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: %s,",
+						helper.GetStructName(col.Name),
+						helper.GetVarName(col.Name)))
+				} else {
+					assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: %sBO.%s.Format(constraint.%s),",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				}
+			} else {
+				assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+
+		if prepareTimeFields.Len() > 0 {
+			rlListInfoConvertBuf.WriteString(prepareTimeFields.String())
+		}
+
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("%sListInfo := &%sListInfo{%s\n\t\t\t",
+			rlVarName, rlStructName, assignFields.String()))
+		rlListInfoConvertBuf.WriteString("}\n\t\t\t")
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sListInfo)\n\t\t", rlVarName, rlVarName, rlVarName))
+		rlListInfoConvertBuf.WriteString("}\n\t\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO, rlListInfoConvertBuf.String())
+
+	// 10. 生成ToListInfo函数中的RL字段赋值
+	var rlListInfoAssignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlListInfoAssignBuf.WriteString(fmt.Sprintf("\n\t\t\t%ss: %ss,", rlStructName, rlVarName))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO, rlListInfoAssignBuf.String())
+
+	// 11. 生成RL表操作函数（Add、Remove、Get）
+	var rlHandlerFuncsBuf strings.Builder
+	for _, rlTable := range rlTables {
+		mainTableStructName := helper.GetStructName(mainTable.Name)
+		mainTableVarName := helper.GetVarName(mainTable.Name)
+		rlTableStructName := helper.GetStructName(rlTable.Name)
+		rlTableVarName := helper.GetVarName(rlTable.Name)
+
+		// Add函数
+		addFunc := template.TplRLHandlerAdd
+		addFunc = strings.ReplaceAll(addFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_TABLE_NAME_VAR, mainTableVarName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_TABLE_NAME_URI, helper.GetURIName(mainTable.Name))
+		addFunc = strings.ReplaceAll(addFunc, template.PH_TABLE_COMMENT, mainTable.Comment)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_NAME_VAR, rlTableVarName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_NAME_URI, helper.GetURIName(rlTable.Name))
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+
+		// 生成BO字段赋值
+		var boAssignBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if !col.IsAlterable {
+				continue
+			}
+			if col.IsHidden {
+				continue
+			}
+			boAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: req.%s,",
+				helper.GetTableColName(col.Name),
+				helper.GetStructName(col.Name)))
+		}
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_BO_ASSIGN, boAssignBuf.String())
+
+		// 生成Detail字段赋值
+		var detailAssignBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				tFormat := "SecondTimeFormat"
+				if col.Type == model.ColumnType_TIME ||
+					col.Type == model.ColumnType_TIMETZ {
+					tFormat = "HourMinuteSecondFormat"
+				} else if col.Type == model.ColumnType_DATE {
+					tFormat = "DateFormat"
+				}
+
+				if !col.IsRequired {
+					detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: func() *string { if %sBO.%s != nil { t := %sBO.%s.Format(constraint.%s); return &t }; return nil }(),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				} else {
+					detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: %sBO.%s.Format(constraint.%s),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				}
+			} else {
+				detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlTableVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_DETAIL_ASSIGN, detailAssignBuf.String())
+		rlHandlerFuncsBuf.WriteString(addFunc)
+
+		// Remove函数
+		removeFunc := template.TplRLHandlerRemove
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_TABLE_NAME_VAR, mainTableVarName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_TABLE_NAME_URI, helper.GetURIName(mainTable.Name))
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_TABLE_COMMENT, mainTable.Comment)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_NAME_VAR, rlTableVarName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_NAME_URI, helper.GetURIName(rlTable.Name))
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+		rlHandlerFuncsBuf.WriteString(removeFunc)
+
+		// Get函数
+		getFunc := template.TplRLHandlerGet
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_VAR, mainTableVarName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_URI, helper.GetURIName(mainTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_COMMENT, mainTable.Comment)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_NAME_VAR, rlTableVarName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_NAME_URI, helper.GetURIName(rlTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+
+		// 生成Detail字段赋值（循环中）
+		var detailAssignLoopBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				tFormat := "SecondTimeFormat"
+				if col.Type == model.ColumnType_TIME ||
+					col.Type == model.ColumnType_TIMETZ {
+					tFormat = "HourMinuteSecondFormat"
+				} else if col.Type == model.ColumnType_DATE {
+					tFormat = "DateFormat"
+				}
+
+				if !col.IsRequired {
+					detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %sBO.%s != nil { t := %sBO.%s.Format(constraint.%s); return &t }; return nil }(),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				} else {
+					detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: %sBO.%s.Format(constraint.%s),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						tFormat))
+				}
+			} else {
+				detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlTableVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_DETAIL_ASSIGN_LOOP, detailAssignLoopBuf.String())
+		rlHandlerFuncsBuf.WriteString(getFunc)
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_HANDLER_FUNCTIONS, rlHandlerFuncsBuf.String())
+}
+
+// genRLGRPCHandlerFunctions 为gRPC生成RL表操作的相关代码
+func genRLGRPCHandlerFunctions(code *string, mainTable *model.Table) {
+	project := mainTable.Database.Project
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, table := range project.Database.Tables {
+		tableNameToTable[table.Name] = table
+	}
+
+	// 获取该主表的所有RL表
+	var rlTables []*model.Table
+	for _, table := range project.Database.Tables {
+		if table.Type == model.TableType_RL {
+			// 查找指向主表的外键
+			identifiedMainTable := helper.IdentifyRLMainTable(table, tableNameToTable)
+			if identifiedMainTable != nil && identifiedMainTable.Name == mainTable.Name {
+				rlTables = append(rlTables, table)
+			}
+		}
+	}
+
+	// 1. 生成gRPC ToDetail函数中的RL转换逻辑
+	var convertBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		convertBuf.WriteString(fmt.Sprintf("var %ss []*api.%sDetail\n\t", rlVarName, rlStructName))
+		convertBuf.WriteString(fmt.Sprintf("for _, %sBO := range bo.%ss {\n\t\t", rlVarName, rlStructName))
+		convertBuf.WriteString(fmt.Sprintf("%sDetail := &api.%sDetail{\n", rlVarName, rlStructName))
+
+		// 为每个RL表字段生成转换逻辑
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: func() *string { if %sBO.%s != nil { t := jgstr.FormatTime(*%sBO.%s); return &t }; return nil }(),\n",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name)))
+				} else {
+					convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: jgstr.FormatTime(%sBO.%s),\n",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name)))
+				}
+			} else {
+				convertBuf.WriteString(fmt.Sprintf("\t\t\t%s: %sBO.%s,\n",
+					helper.GetStructName(col.Name),
+					rlVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+
+		convertBuf.WriteString("\t\t}\n\t\t")
+		convertBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sDetail)\n\t", rlVarName, rlVarName, rlVarName))
+		convertBuf.WriteString("}\n\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_DETAIL_GRPC, convertBuf.String())
+
+	// 2. 生成gRPC主表Detail赋值中的RL字段
+	var assignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		assignBuf.WriteString(fmt.Sprintf("\n\t\t%ss: %ss,", rlStructName, rlVarName))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_DETAIL_GRPC, assignBuf.String())
+
+	// 3. 生成gRPC Create转BO时的RL字段赋值
+	var createAssignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		createAssignBuf.WriteString(fmt.Sprintf("var %ss []*biz.%sBO\n\t", rlVarName, rlStructName))
+		createAssignBuf.WriteString(fmt.Sprintf("for _, %sData := range req.%ss {\n\t\t", rlVarName, rlStructName))
+		createAssignBuf.WriteString(fmt.Sprintf("%sBO := &biz.%sBO{\n", rlVarName, rlStructName))
+
+		// 为每个RL表的alter=true字段生成赋值
+		for _, col := range rlTable.Columns {
+			if !col.IsAlterable {
+				continue
+			}
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					createAssignBuf.WriteString(fmt.Sprintf("\t\t\t%s: func() *time.Time { if %sData.%s != nil { t := jgstr.ParseTime(*%sData.%s); return &t }; return nil }(),\n",
+						helper.GetTableColName(col.Name),
+						rlVarName,
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetStructName(col.Name)))
+				} else {
+					createAssignBuf.WriteString(fmt.Sprintf("\t\t\t%s: jgstr.ParseTime(%sData.%s),\n",
+						helper.GetTableColName(col.Name),
+						rlVarName,
+						helper.GetStructName(col.Name)))
+				}
+			} else {
+				createAssignBuf.WriteString(fmt.Sprintf("\t\t\t%s: %sData.%s,\n",
+					helper.GetTableColName(col.Name),
+					rlVarName,
+					helper.GetStructName(col.Name)))
+			}
+		}
+
+		createAssignBuf.WriteString("\t\t}\n\t\t")
+		createAssignBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sBO)\n\t", rlVarName, rlVarName, rlVarName))
+		createAssignBuf.WriteString("}\n\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CREATE_ASSIGN_TO_BO_GRPC, createAssignBuf.String())
+
+	// 4. 生成gRPC ToListInfo函数中的RL转换逻辑
+	var rlListInfoConvertBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("var %ss []*api.%sListInfo\n\t\t", rlVarName, rlStructName))
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("for _, %sBO := range objs[i].%ss {\n\t\t\t", rlVarName, rlStructName))
+
+		// 检查是否有时间字段需要特殊处理
+		var assignFields strings.Builder
+
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if !col.IsList {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: func() *string { if %sBO.%s != nil { t := jgstr.FormatTime(*%sBO.%s); return &t }; return nil }(),",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name)))
+				} else {
+					assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: jgstr.FormatTime(%sBO.%s),",
+						helper.GetStructName(col.Name),
+						rlVarName,
+						helper.GetTableColName(col.Name)))
+				}
+			} else {
+				assignFields.WriteString(fmt.Sprintf("\n\t\t\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("%sListInfo := &api.%sListInfo{%s\n\t\t\t",
+			rlVarName, rlStructName, assignFields.String()))
+		rlListInfoConvertBuf.WriteString("}\n\t\t\t")
+		rlListInfoConvertBuf.WriteString(fmt.Sprintf("%ss = append(%ss, %sListInfo)\n\t\t", rlVarName, rlVarName, rlVarName))
+		rlListInfoConvertBuf.WriteString("}\n\t\t")
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, rlListInfoConvertBuf.String())
+
+	// 5. 生成gRPC ToListInfo函数中的RL字段赋值
+	var rlListInfoAssignBuf strings.Builder
+	for _, rlTable := range rlTables {
+		// 检查是否有list=true的字段
+		hasListFields := false
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+			if col.IsList {
+				hasListFields = true
+				break
+			}
+		}
+
+		if !hasListFields {
+			continue // 如果没有list字段，跳过
+		}
+
+		rlVarName := helper.GetVarName(rlTable.Name)
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlListInfoAssignBuf.WriteString(fmt.Sprintf("\n\t\t\t%ss: %ss,", rlStructName, rlVarName))
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, rlListInfoAssignBuf.String())
+
+	// 6. 生成gRPC RL表操作函数（Add、Remove、Get）
+	var rlGrpcHandlerFuncsBuf strings.Builder
+	for _, rlTable := range rlTables {
+		mainTableStructName := helper.GetStructName(mainTable.Name)
+		rlTableStructName := helper.GetStructName(rlTable.Name)
+		rlTableVarName := helper.GetVarName(rlTable.Name)
+
+		// Add函数
+		addFunc := template.TplGRPCRLHandlerAdd
+		addFunc = strings.ReplaceAll(addFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_NAME_VAR, rlTableVarName)
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+
+		// 生成gRPC BO字段赋值
+		var boAssignBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if !col.IsAlterable {
+				continue
+			}
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					boAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: func() *time.Time { if req.%s != nil { t := jgstr.ParseTime(*req.%s); return &t }; return nil }(),",
+						helper.GetTableColName(col.Name),
+						helper.GetStructName(col.Name),
+						helper.GetStructName(col.Name)))
+				} else {
+					boAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: jgstr.ParseTime(req.%s),",
+						helper.GetTableColName(col.Name),
+						helper.GetStructName(col.Name)))
+				}
+			} else {
+				boAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: req.%s,",
+					helper.GetTableColName(col.Name),
+					helper.GetStructName(col.Name)))
+			}
+		}
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_BO_ASSIGN_GRPC, boAssignBuf.String())
+
+		// 生成gRPC Detail字段赋值
+		var detailAssignBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: func() *string { if %sBO.%s != nil { t := jgstr.FormatTime(*%sBO.%s); return &t }; return nil }(),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name)))
+				} else {
+					detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: jgstr.FormatTime(%sBO.%s),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name)))
+				}
+			} else {
+				detailAssignBuf.WriteString(fmt.Sprintf("\n\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlTableVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+		addFunc = strings.ReplaceAll(addFunc, template.PH_RL_DETAIL_ASSIGN_GRPC, detailAssignBuf.String())
+		rlGrpcHandlerFuncsBuf.WriteString(addFunc)
+
+		// Remove函数
+		removeFunc := template.TplGRPCRLHandlerRemove
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		removeFunc = strings.ReplaceAll(removeFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+		rlGrpcHandlerFuncsBuf.WriteString(removeFunc)
+
+		// Get函数
+		getFunc := template.TplGRPCRLHandlerGet
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_STRUCT, mainTableStructName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_NAME_STRUCT, rlTableStructName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_NAME_VAR, rlTableVarName)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+
+		// 生成gRPC Detail字段赋值（循环中）
+		var detailAssignLoopBuf strings.Builder
+		for _, col := range rlTable.Columns {
+			if col.IsHidden {
+				continue
+			}
+
+			if col.Type == model.ColumnType_DATETIME ||
+				col.Type == model.ColumnType_TIMESTAMP ||
+				col.Type == model.ColumnType_TIME ||
+				col.Type == model.ColumnType_DATE ||
+				col.Type == model.ColumnType_TIMETZ ||
+				col.Type == model.ColumnType_TIMESTAMPTZ {
+
+				if !col.IsRequired {
+					detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %sBO.%s != nil { t := jgstr.FormatTime(*%sBO.%s); return &t }; return nil }(),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name)))
+				} else {
+					detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: jgstr.FormatTime(%sBO.%s),",
+						helper.GetStructName(col.Name),
+						rlTableVarName,
+						helper.GetTableColName(col.Name)))
+				}
+			} else {
+				detailAssignLoopBuf.WriteString(fmt.Sprintf("\n\t\t\t%s: %sBO.%s,",
+					helper.GetStructName(col.Name),
+					rlTableVarName,
+					helper.GetTableColName(col.Name)))
+			}
+		}
+		getFunc = strings.ReplaceAll(getFunc, template.PH_RL_DETAIL_ASSIGN_LOOP_GRPC, detailAssignLoopBuf.String())
+		rlGrpcHandlerFuncsBuf.WriteString(getFunc)
+	}
+	*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, rlGrpcHandlerFuncsBuf.String())
 }

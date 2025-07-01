@@ -296,6 +296,7 @@ type ForeignKey struct {
 	Counter    string `xml:"counter,attr"`     // 计数对应的表字段名
 	RiRaw      string `xml:"ri_raw,attr"`      // 倒排索引key的原始字段名
 	AutoRemove bool   `xml:"auto_remove,attr"` // 当链接的目标record被删除时，是否自动删除当前record
+	IsMain     bool   `xml:"is_main,attr"`     // 对于RL表，标识此外键是否指向主表
 
 	Primary string  `xml:"-"`          // 目标数据库表的主键字段名
 	Alias   string  `xml:"-"`          // 外链的唯一别名

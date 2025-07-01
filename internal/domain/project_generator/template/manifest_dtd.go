@@ -139,7 +139,8 @@ name: 字段名
 table: 外链的目标数据库表
 counter: 计数对应的表字段名
 ri_raw: 倒排索引key的原始字段名
-auto_remove: 当链接的目标record被删除时, 是否自动删除当前record
+auto_remove: 当链接的目标record被删除时, 是否自动删除当前record，仅对RL表有效
+is_main: 对于RL表，标识此外键是否指向主表 (true|false)
 -->
 <!ELEMENT foreign_key EMPTY>
 <!ATTLIST foreign_key
@@ -147,5 +148,6 @@ auto_remove: 当链接的目标record被删除时, 是否自动删除当前recor
     counter CDATA #IMPLIED
     ri_raw CDATA #IMPLIED
     auto_remove (true|false) "false"
+    is_main (true|false) "false"
 >
 `

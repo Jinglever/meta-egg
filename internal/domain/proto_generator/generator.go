@@ -296,6 +296,8 @@ func genHandlerMessage(code *string, project *model.Project, table *model.Table)
 	if table.Type == model.TableType_DATA {
 		str := template.TplProtoDataTableMessage
 		replaceTplForTable(&str, table)
+		// 添加RL表支持
+		genRLFieldsAndMessages(&str, table, project)
 		buf.WriteString(str)
 	} else if table.Type == model.TableType_META {
 		str := template.TplProtoMetaTableMessage
@@ -320,6 +322,8 @@ func genHandlerFunction(code *string, project *model.Project) {
 			if table.Type == model.TableType_DATA {
 				str := template.TplProtoDataTableHandlerFuncs
 				replaceTplForTable(&str, table)
+				// 添加RL表gRPC方法
+				genRLHandlerFunctions(&str, table, project)
 				buf.WriteString(str)
 			} else if table.Type == model.TableType_META {
 				str := template.TplProtoMetaTableHandlerFuncs
@@ -439,4 +443,142 @@ func genColListForUpdate(code *string, table *model.Table, cnt int) int {
 	}
 	*code = strings.ReplaceAll(*code, template.PH_COL_LIST_FOR_UPDATE, buf.String())
 	return cnt
+}
+
+func genRLFieldsAndMessages(code *string, table *model.Table, project *model.Project) {
+	if project.Database == nil {
+		// 清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_DETAIL, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_LIST, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_CREATE, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_MESSAGES, "")
+		return
+	}
+
+	// 创建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range project.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取该主表的所有RL表
+	rlTables := helper.GetMainTableRLs(table, project.Database.Tables)
+
+	var (
+		detailFieldsBuf strings.Builder
+		listFieldsBuf   strings.Builder
+		createFieldsBuf strings.Builder
+		messagesBuf     strings.Builder
+		fieldIndex      = getLastFieldIndex(table) + 1 // 从主表字段后继续编号
+	)
+
+	for _, rlTable := range rlTables {
+		// 为Detail消息添加RL表字段（所有RL表都包含）
+		detailFieldsBuf.WriteString(fmt.Sprintf("    repeated %sDetail %s = %d; // %s列表\n",
+			helper.GetStructName(rlTable.Name),
+			helper.GetDirName(rlTable.Name)+"s",
+			fieldIndex,
+			rlTable.Comment))
+		detailFieldIndex := fieldIndex
+		fieldIndex++
+
+		// 为ListInfo消息添加RL表字段（仅包含有list=true字段的RL表）
+		if helper.ShouldIncludeRLInList(rlTable) {
+			listFieldsBuf.WriteString(fmt.Sprintf("    repeated %sListInfo %s = %d; // %s列表\n",
+				helper.GetStructName(rlTable.Name),
+				helper.GetDirName(rlTable.Name)+"s",
+				detailFieldIndex, // 使用相同的字段索引
+				rlTable.Comment))
+		}
+
+		// 为Create请求添加RL表字段（包含alter=true的字段）
+		createFieldsBuf.WriteString(genRLFieldsForCreate(rlTable, fieldIndex))
+		fieldIndex++
+
+		// 生成RL表相关消息
+		rlMsg := template.TplRLTableMessage
+		replaceTplForRLTable(&rlMsg, rlTable, table)
+		messagesBuf.WriteString(rlMsg)
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_DETAIL, detailFieldsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_LIST, listFieldsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_IN_CREATE, createFieldsBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_MESSAGES, messagesBuf.String())
+}
+
+func genRLHandlerFunctions(code *string, table *model.Table, project *model.Project) {
+	if project.Database == nil {
+		// 清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_RL_HANDLER_FUNCTIONS, "")
+		return
+	}
+
+	// 获取该主表的所有RL表
+	rlTables := helper.GetMainTableRLs(table, project.Database.Tables)
+
+	var handlerFuncsBuf strings.Builder
+
+	for _, rlTable := range rlTables {
+		// 生成RL表的gRPC方法
+		rlHandlerFunc := template.TplRLTableHandlerFuncs
+		replaceTplForRLTable(&rlHandlerFunc, rlTable, table)
+		handlerFuncsBuf.WriteString(rlHandlerFunc)
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_RL_HANDLER_FUNCTIONS, handlerFuncsBuf.String())
+}
+
+// getLastFieldIndex 获取表中最后一个字段的索引（用于proto字段编号）
+func getLastFieldIndex(table *model.Table) int {
+	maxIndex := 0
+	for _, col := range table.Columns {
+		if !col.IsHidden {
+			maxIndex++
+		}
+	}
+	return maxIndex
+}
+
+// replaceTplForRLTable 为RL表模板替换占位符
+func replaceTplForRLTable(code *string, rlTable *model.Table, mainTable *model.Table) {
+	// 替换RL表相关占位符
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME_STRUCT, helper.GetStructName(rlTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_NAME_STRUCT, helper.GetStructName(mainTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_COMMENT, mainTable.Comment)
+	*code = strings.ReplaceAll(*code, template.PH_MAIN_TABLE_NAME_LOWER, helper.GetDirName(mainTable.Name))
+	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME_LOWER, helper.GetDirName(rlTable.Name))
+
+	// 生成RL表的字段列表
+	genColListInVO(code, rlTable)
+	genColListForCreate(code, rlTable)
+	genColListForList(code, rlTable)
+}
+
+func genRLFieldsForCreate(rlTable *model.Table, startFieldIndex int) string {
+	var buf strings.Builder
+	fieldIndex := startFieldIndex
+
+	// 只生成alter=true的字段，以repeated形式包含在Create请求中
+	hasAlterableFields := false
+	for _, col := range rlTable.Columns {
+		if col.IsAlterable && !col.IsHidden {
+			hasAlterableFields = true
+			break
+		}
+	}
+
+	if hasAlterableFields {
+		// 生成RL表的创建数据结构
+		buf.WriteString(fmt.Sprintf("    // %s数据列表（可选）\n", rlTable.Comment))
+		buf.WriteString(fmt.Sprintf("    repeated %sCreateData %s = %d;\n",
+			helper.GetStructName(rlTable.Name),
+			helper.GetDirName(rlTable.Name)+"s",
+			fieldIndex))
+	}
+
+	return buf.String()
 }

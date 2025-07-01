@@ -65,6 +65,12 @@ func Generate(codeDir string, project *model.Project, dbOper repo.DBOperator) (r
 
 	// 按照表生成文件
 	for _, table := range project.Database.Tables {
+		// Skip RL tables as they don't need independent repo files
+		// RL table operations are integrated into their main table's repo
+		if table.Type == model.TableType_RL {
+			continue
+		}
+
 		// gen
 		tpl := getGenTableTplByTableType(table.Type)
 		err = generateGoFileForTable(filepath.Join(codeDir, "gen", "repo", table.Name+".go"),
@@ -163,6 +169,12 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	genOrderByList(code, table)
 	genFilterColList(code, table)
 	genFilterGetRepoOptions(code, table)
+
+	// Generate RL table related code for DATA tables
+	if table.Type == model.TableType_DATA {
+		genRLMethods(code, table)
+	}
+
 	if table.Type == model.TableType_META {
 		metaRecords, err := helper.GetMetaRecords(table, eCols, dbOper)
 		if err != nil {
@@ -405,4 +417,246 @@ func genFilterGetRepoOptions(code *string, table *model.Table) {
 		}
 	}
 	*code = strings.ReplaceAll(*code, template.PH_FILTER_GET_REPO_OPTIONS, buf.String())
+}
+
+func genRLMethods(code *string, table *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前主表的所有RL表
+	rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+
+	if len(rlTables) == 0 {
+		// 如果没有RL表，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_RL_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_METHODS_IMPLEMENTATION, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_LIST_PRELOAD, "")
+		*code = strings.ReplaceAll(*code, template.PH_RL_DETAIL_PRELOAD, "")
+		return
+	}
+
+	var interfaceBuf, implBuf, listPreloadBuf, detailPreloadBuf strings.Builder
+
+	// 生成预加载逻辑
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		rlFieldName := rlStructName + "s" // 复数形式
+
+		// 详情查询总是预加载所有RL表
+		detailPreloadBuf.WriteString(fmt.Sprintf("\ttx = tx.Preload(\"%s\")\n", rlFieldName))
+
+		// 列表查询只预加载有list字段的RL表
+		if helper.ShouldIncludeRLInList(rlTable) {
+			listPreloadBuf.WriteString(fmt.Sprintf("\ttx = tx.Preload(\"%s\")\n", rlFieldName))
+		}
+	}
+
+	// 生成RL表操作方法
+	for _, rlTable := range rlTables {
+		rlStructName := helper.GetStructName(rlTable.Name)
+		mainTableStructName := helper.GetStructName(table.Name)
+		rlTablePrimaryColName := helper.GetTableColName(rlTable.PrimaryColumn.Name)
+
+		// 找到指向主表的外键字段名
+		var mainFKFieldName string
+
+		// 找到指向主表的外键字段
+		for _, column := range rlTable.Columns {
+			for _, fk := range column.ForeignKeys {
+				if fk.Table == table.Name {
+					// 如果有明确标记为主外键，或者只有一个外键指向主表
+					if fk.IsMain {
+						mainFKFieldName = helper.GetTableColName(column.Name)
+						break
+					} else if mainFKFieldName == "" {
+						// 如果还没找到，先记录这个
+						mainFKFieldName = helper.GetTableColName(column.Name)
+					}
+				}
+			}
+			if mainFKFieldName != "" {
+				break
+			}
+		}
+
+		if mainFKFieldName == "" {
+			continue // 跳过无法识别主外键的RL表
+		}
+
+		// 生成接口方法
+		interfaceBuf.WriteString(fmt.Sprintf(`
+	// %s related methods
+	Add%s(ctx context.Context, mainId uint64, rl *model.%s) error
+	Remove%s(ctx context.Context, mainId uint64, rlId uint64) error
+	RemoveAll%s(ctx context.Context, mainId uint64) error
+	GetAll%s(ctx context.Context, mainId uint64) ([]*model.%s, error)`,
+			rlStructName, rlStructName, rlStructName, rlStructName, rlStructName, rlStructName, rlStructName))
+
+		// 生成实现方法 - 分别生成每个方法避免参数混乱
+
+		// Add方法
+		implBuf.WriteString(fmt.Sprintf(`
+// Add%s adds a %s record for the main table
+func (s *%sRepoImpl) Add%s(ctx context.Context, mainId uint64, rl *model.%s) error {
+	if rl == nil {
+		return fmt.Errorf("rl cannot be nil")
+	}
+	rl.%s = mainId
+	%s
+	return s.GetTX(ctx).Create(rl).Error
+}`,
+			rlStructName, rlTable.Name, mainTableStructName, rlStructName, rlStructName, mainFKFieldName,
+			generateRLSetMEForCreate(rlTable)))
+
+		// Remove方法
+		implBuf.WriteString(fmt.Sprintf(`
+// Remove%s removes a %s record by RL ID
+func (s *%sRepoImpl) Remove%s(ctx context.Context, mainId uint64, rlId uint64) error {
+	tx := s.GetTX(ctx).Where(model.Col%s%s+" = ? AND "+model.Col%s%s+" = ?", mainId, rlId)
+	%s
+	return nil
+}`,
+			rlStructName, rlTable.Name, mainTableStructName, rlStructName,
+			rlStructName, mainFKFieldName, rlStructName, rlTablePrimaryColName,
+			generateRLDeleteLogic(rlTable, rlStructName)))
+
+		// RemoveAll方法
+		implBuf.WriteString(fmt.Sprintf(`
+// RemoveAll%s removes all %s records for the main table
+func (s *%sRepoImpl) RemoveAll%s(ctx context.Context, mainId uint64) error {
+	tx := s.GetTX(ctx).Where(model.Col%s%s+" = ?", mainId)
+	%s
+	return nil
+}`,
+			rlStructName, rlTable.Name, mainTableStructName, rlStructName,
+			rlStructName, mainFKFieldName,
+			generateRLBatchDeleteLogic(rlTable, rlStructName)))
+
+		// Get方法
+		implBuf.WriteString(fmt.Sprintf(`
+// Get%ss retrieves all %s records for the main table
+func (s *%sRepoImpl) GetAll%s(ctx context.Context, mainId uint64) ([]*model.%s, error) {
+	var rls []*model.%s
+	err := s.GetTX(ctx).Where(model.Col%s%s+" = ?", mainId).Find(&rls).Error
+	return rls, err
+}`,
+			rlStructName, rlTable.Name, mainTableStructName, rlStructName, rlStructName, rlStructName,
+			rlStructName, mainFKFieldName))
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_RL_METHODS_INTERFACE, interfaceBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_METHODS_IMPLEMENTATION, implBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_LIST_PRELOAD, listPreloadBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_RL_DETAIL_PRELOAD, detailPreloadBuf.String())
+}
+
+func generateRLSetMEForCreate(rlTable *model.Table) string {
+	eCols := helper.GetExtTypeCols(rlTable)
+	if eCols.CreatedBy == nil && eCols.UpdatedBy == nil {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString("if me, ok := contexts.GetME(ctx); ok {\n\t\t")
+
+	if (eCols.CreatedBy != nil && !eCols.CreatedBy.IsRequired) ||
+		(eCols.UpdatedBy != nil && !eCols.UpdatedBy.IsRequired) {
+		buf.WriteString("meID := me.ID\n\t\t")
+	}
+
+	if eCols.CreatedBy != nil {
+		if eCols.CreatedBy.IsRequired {
+			buf.WriteString(fmt.Sprintf("rl.%s = me.ID", helper.GetTableColName(eCols.CreatedBy.Name)))
+		} else {
+			buf.WriteString(fmt.Sprintf("rl.%s = &meID", helper.GetTableColName(eCols.CreatedBy.Name)))
+		}
+	}
+
+	if eCols.UpdatedBy != nil {
+		if eCols.CreatedBy != nil {
+			buf.WriteString("\n\t\t")
+		}
+		if eCols.UpdatedBy.IsRequired {
+			buf.WriteString(fmt.Sprintf("rl.%s = me.ID", helper.GetTableColName(eCols.UpdatedBy.Name)))
+		} else {
+			buf.WriteString(fmt.Sprintf("rl.%s = &meID", helper.GetTableColName(eCols.UpdatedBy.Name)))
+		}
+	}
+
+	buf.WriteString("\n\t}")
+	return buf.String()
+}
+
+func generateRLDeleteLogic(rlTable *model.Table, rlStructName string) string {
+	eCols := helper.GetExtTypeCols(rlTable)
+	if eCols.DeletedAt != nil && eCols.DeletedBy != nil {
+		// 软删除：有删除者和删除时间字段
+		var deletedAtValue string
+		if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE {
+			deletedAtValue = "time.Now()"
+		} else if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE2 {
+			deletedAtValue = "time.Now().Unix()"
+		}
+
+		return fmt.Sprintf(`var result *gorm.DB
+	if me, ok := contexts.GetME(ctx); ok {
+		result = tx.UpdateColumns(map[string]interface{}{
+			model.Col%s%s: &(me.ID),
+			model.Col%s%s: %s,
+		})
+	} else {
+		result = tx.Delete(&model.%s{})
+	}
+	if result.Error != nil {
+		return result.Error
+	}`,
+			rlStructName, helper.GetTableColName(eCols.DeletedBy.Name),
+			rlStructName, helper.GetTableColName(eCols.DeletedAt.Name), deletedAtValue,
+			rlStructName)
+	} else {
+		// 硬删除：没有软删除字段
+		return fmt.Sprintf(`result := tx.Delete(&model.%s{})
+	if result.Error != nil {
+		return result.Error
+	}`, rlStructName)
+	}
+}
+
+func generateRLBatchDeleteLogic(rlTable *model.Table, rlStructName string) string {
+	eCols := helper.GetExtTypeCols(rlTable)
+	if eCols.DeletedAt != nil && eCols.DeletedBy != nil {
+		// 软删除：有删除者和删除时间字段
+		var deletedAtValue string
+		if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE {
+			deletedAtValue = "time.Now()"
+		} else if eCols.DeletedAt.ExtType == model.ColumnExtType_TIME_DELETE2 {
+			deletedAtValue = "time.Now().Unix()"
+		}
+
+		return fmt.Sprintf(`var result *gorm.DB
+	if me, ok := contexts.GetME(ctx); ok {
+		result = tx.UpdateColumns(map[string]interface{}{
+			model.Col%s%s: &(me.ID),
+			model.Col%s%s: %s,
+		})
+	} else {
+		result = tx.Delete(&model.%s{})
+	}
+	if result.Error != nil {
+		return result.Error
+	}`,
+			rlStructName, helper.GetTableColName(eCols.DeletedBy.Name),
+			rlStructName, helper.GetTableColName(eCols.DeletedAt.Name), deletedAtValue,
+			rlStructName)
+	} else {
+		// 硬删除：没有软删除字段
+		return fmt.Sprintf(`result := tx.Delete(&model.%s{})
+	if result.Error != nil {
+		return result.Error
+	}`, rlStructName)
+	}
 }

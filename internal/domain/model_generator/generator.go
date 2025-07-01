@@ -111,6 +111,18 @@ func generateForTable(path string, table *model.Table, dbOper repo.DBOperator) e
 			imports["time"] = true
 		}
 	}
+
+	// Add RL associations for DATA tables
+	if table.Type == model.TableType_DATA {
+		rlTables := helper.GetMainTableRLs(table, table.Database.Tables)
+		for _, rlTable := range rlTables {
+			rlTableStructName := helper.GetTableColName(rlTable.Name)
+			rlFieldName := helper.GetTableColName(rlTable.Name) + "s"
+			buf.WriteString(fmt.Sprintf("\n	 %s []*%s `gorm:\"foreignKey:%s\"` // %s",
+				rlFieldName, rlTableStructName, findForeignKeyColumnToMainTable(rlTable, table), rlTable.Comment))
+		}
+	}
+
 	code = strings.ReplaceAll(code, template.PH_STRUCT_COL_LIST, buf.String())
 	buf.Reset()
 
@@ -225,4 +237,27 @@ func genCorrectTimezone(code *string, table *model.Table) {
 		}
 	}
 	*code = strings.ReplaceAll(*code, template.PH_CORRECT_TIMEZONE, buf.String())
+}
+
+// findForeignKeyColumnToMainTable 找到RL表中指向主表的主外键字段名
+func findForeignKeyColumnToMainTable(rlTable *model.Table, mainTable *model.Table) string {
+	// 首先查找标记为主外键的字段
+	for _, column := range rlTable.Columns {
+		for _, foreignKey := range column.ForeignKeys {
+			if foreignKey.Table == mainTable.Name && foreignKey.IsMain {
+				return helper.GetTableColName(column.Name)
+			}
+		}
+	}
+
+	// 如果没有明确标记的主外键，查找第一个指向主表的外键（向后兼容）
+	for _, column := range rlTable.Columns {
+		for _, foreignKey := range column.ForeignKeys {
+			if foreignKey.Table == mainTable.Name {
+				return helper.GetTableColName(column.Name)
+			}
+		}
+	}
+
+	return ""
 }
