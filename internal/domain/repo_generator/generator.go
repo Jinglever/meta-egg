@@ -171,9 +171,7 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	genFilterGetRepoOptions(code, table)
 
 	// Generate RL table related code for DATA tables
-	if table.Type == model.TableType_DATA {
-		genRLMethods(code, table)
-	}
+	genRLMethods(code, table)
 
 	if table.Type == model.TableType_META {
 		metaRecords, err := helper.GetMetaRecords(table, eCols, dbOper)
@@ -332,6 +330,11 @@ func genNewRepoFuncListInProviderSet(code *string, project *model.Project) {
 	var buf strings.Builder
 	if project.Database != nil {
 		for _, table := range project.Database.Tables {
+			// Skip RL tables as they don't have independent repo implementations
+			// RL table operations are integrated into their main table's repo
+			if table.Type == model.TableType_RL {
+				continue
+			}
 			buf.WriteString(fmt.Sprintf("New%sRepo,\n", helper.GetStructName(table.Name)))
 		}
 	}
@@ -342,6 +345,11 @@ func genNewRepoFuncListInMockProviderSet(code *string, project *model.Project) {
 	var buf strings.Builder
 	if project.Database != nil {
 		for _, table := range project.Database.Tables {
+			// Skip RL tables as they don't have independent repo implementations
+			// RL table operations are integrated into their main table's repo
+			if table.Type == model.TableType_RL {
+				continue
+			}
 			buf.WriteString(fmt.Sprintf("// mock.NewMock%sRepo,\n", helper.GetStructName(table.Name)))
 			buf.WriteString(fmt.Sprintf("// wire.Bind(new(%sRepo), new(*mock.Mock%sRepo)),\n",
 				helper.GetStructName(table.Name),

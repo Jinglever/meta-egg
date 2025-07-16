@@ -140,6 +140,11 @@ func (t *Table) MakeUp(d *Database) {
 			}
 		}
 	}
+
+	// 对于RL表，强制设置HasHandler为false，即使XML中配置了handler="true"
+	if t.Type == TableType_RL {
+		t.HasHandler = false
+	}
 }
 
 func (c *Column) MakeUp(t *Table) {

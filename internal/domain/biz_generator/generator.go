@@ -182,6 +182,11 @@ func genAssignRepoList(code *string, project *model.Project) {
 	}
 	var buf bytes.Buffer
 	for _, table := range project.Database.Tables {
+		// Skip RL tables as they don't have independent repo implementations
+		// RL table operations are integrated into their main table's repo
+		if table.Type == model.TableType_RL {
+			continue
+		}
 		buf.WriteString(fmt.Sprintf("%sRepo: %sRepo,\n",
 			helper.GetStructName(table.Name),
 			helper.GetVarName(table.Name)))
@@ -196,6 +201,11 @@ func genRepoListInArg(code *string, project *model.Project) {
 	}
 	var buf bytes.Buffer
 	for _, table := range project.Database.Tables {
+		// Skip RL tables as they don't have independent repo implementations
+		// RL table operations are integrated into their main table's repo
+		if table.Type == model.TableType_RL {
+			continue
+		}
 		buf.WriteString(fmt.Sprintf("%sRepo repo.%sRepo,\n",
 			helper.GetVarName(table.Name),
 			helper.GetStructName(table.Name)))
@@ -210,6 +220,11 @@ func genRepoListInStruct(code *string, project *model.Project) {
 	}
 	var buf bytes.Buffer
 	for _, table := range project.Database.Tables {
+		// Skip RL tables as they don't have independent repo implementations
+		// RL table operations are integrated into their main table's repo
+		if table.Type == model.TableType_RL {
+			continue
+		}
 		buf.WriteString(fmt.Sprintf("%sRepo repo.%sRepo\n",
 			helper.GetStructName(table.Name),
 			helper.GetStructName(table.Name)))
