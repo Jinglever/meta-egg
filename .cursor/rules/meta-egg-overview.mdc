@@ -80,13 +80,18 @@ generated-project/
 - SQL migration generation
 - Support for MySQL and PostgreSQL
 
-### 3. API Generation
+### 3. Code Generation Philosophy
+- **Variable Injection**: Prefer using variables for table names and field names rather than hardcoding
+- **Template Flexibility**: Support dynamic table/field name injection in SQL queries and GORM operations
+- **Maintainability**: Generated code should be readable and follow consistent patterns
+
+### 4. API Generation
 - HTTP REST APIs with proper routing
 - gRPC service definitions
 - Swagger documentation generation
 - Input validation and error handling
 
-### 4. Development Tools
+### 5. Development Tools
 - Hot reload support
 - Debug configurations
 - Testing framework setup

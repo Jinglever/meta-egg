@@ -35,4 +35,13 @@ const (
 	PH_MAIN_TABLE_NAME_LOWER  = "%%MAIN-TABLE-NAME-LOWER%%"  // 主表名小写
 	PH_RL_TABLE_NAME_LOWER    = "%%RL-TABLE-NAME-LOWER%%"    // RL表名小写
 	PH_RL_FIELDS_IN_CREATE    = "%%RL-FIELDS-IN-CREATE%%"    // RL表字段在Create请求中
+
+	// BR table related placeholders
+	PH_BR_HANDLER_FUNCTIONS      = "%%BR-HANDLER-FUNCTIONS%%"      // BR表相关的gRPC方法定义
+	PH_OTHER_TABLE_NAME_STRUCT   = "%%OTHER-TABLE-NAME-STRUCT%%"   // BR关系中对方表的结构体名
+	PH_OTHER_TABLE_COMMENT       = "%%OTHER-TABLE-COMMENT%%"       // BR关系中对方表的注释
+	PH_TABLE_NAME_LOWER          = "%%TABLE-NAME-LOWER%%"          // 当前表名小写
+	PH_OTHER_COL_LIST_FOR_FILTER = "%%OTHER-COL-LIST-FOR-FILTER%%" // BR关系中对方表的筛选字段
+	PH_OTHER_COL_LIST_FOR_ORDER  = "%%OTHER-COL-LIST-FOR-ORDER%%"  // BR关系中对方表的排序字段
+	PH_BR_MESSAGES               = "%%BR-MESSAGES%%"               // BR表相关的消息定义
 )

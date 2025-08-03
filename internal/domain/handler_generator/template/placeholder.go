@@ -101,4 +101,23 @@ const (
 	PH_RL_BO_ASSIGN_GRPC          = "%%RL-BO-ASSIGN-GRPC%%"          // gRPC RL BO字段赋值
 	PH_RL_DETAIL_ASSIGN_GRPC      = "%%RL-DETAIL-ASSIGN-GRPC%%"      // gRPC RL Detail字段赋值
 	PH_RL_DETAIL_ASSIGN_LOOP_GRPC = "%%RL-DETAIL-ASSIGN-LOOP-GRPC%%" // gRPC RL Detail字段赋值（循环中）
+
+	// BR table related placeholders for HTTP handlers
+	PH_BR_HTTP_HANDLER_FUNCTIONS = "%%BR-HTTP-HANDLER-FUNCTIONS%%" // BR表HTTP操作函数定义
+
+	// BR table related placeholders for gRPC handlers
+	PH_BR_GRPC_HANDLER_FUNCTIONS = "%%BR-GRPC-HANDLER-FUNCTIONS%%" // BR表gRPC操作函数定义
+
+	// BR table template related placeholders
+	PH_OTHER_TABLE_NAME_STRUCT               = "%%OTHER-TABLE-NAME-STRUCT%%"               // BR关系中的对方表结构体名
+	PH_OTHER_TABLE_NAME_URI                  = "%%OTHER-TABLE-NAME-URI%%"                  // BR关系中的对方表URI名
+	PH_OTHER_TABLE_NAME_VAR                  = "%%OTHER-TABLE-NAME-VAR%%"                  // BR关系中的对方表变量名
+	PH_OTHER_TABLE_COMMENT                   = "%%OTHER-TABLE-COMMENT%%"                   // BR关系中的对方表注释
+	PH_OTHER_COL_LIST_FOR_FILTER_DOC         = "%%OTHER-COL-LIST-FOR-FILTER-DOC%%"         // BR关系中对方表的筛选字段文档
+	PH_OTHER_COL_LIST_FOR_ORDER_DOC          = "%%OTHER-COL-LIST-FOR-ORDER-DOC%%"          // BR关系中对方表的排序字段文档
+	PH_OTHER_PREPARE_ASSIGN_FILTER_TO_OPTION = "%%OTHER-PREPARE-ASSIGN-FILTER-TO-OPTION%%" // BR关系中对方表的筛选条件准备赋值
+	PH_OTHER_FILTER_ASSIGN_TO_OPTION         = "%%OTHER-FILTER-ASSIGN-TO-OPTION%%"         // BR关系中对方表的筛选条件赋值
+	PH_OTHER_ASSIGN_ORDER_TO_OPTION          = "%%OTHER-ASSIGN-ORDER-TO-OPTION%%"          // BR关系中对方表的排序条件赋值
+	PH_OTHER_FILTER_ASSIGN_TO_OPTION_GRPC    = "%%OTHER-FILTER-ASSIGN-TO-OPTION-GRPC%%"    // BR关系中对方表的gRPC筛选条件赋值
+	PH_OTHER_ASSIGN_ORDER_TO_OPTION_GRPC     = "%%OTHER-ASSIGN-ORDER-TO-OPTION-GRPC%%"     // BR关系中对方表的gRPC排序条件赋值
 )

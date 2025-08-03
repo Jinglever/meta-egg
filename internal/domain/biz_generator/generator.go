@@ -116,6 +116,8 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, template.TplFuncDelete)
 		// Generate RL table related code for DATA tables
 		genRLBizMethods(code, table)
+		// Generate BR table related code for DATA tables
+		genBRBizMethods(code, table)
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, template.TplFuncGetList)
@@ -123,6 +125,8 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, "")
 		// Clear RL placeholders for non-DATA tables
 		clearRLPlaceholders(code)
+		// Clear BR placeholders for non-DATA tables
+		clearBRPlaceholders(code)
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, "")
@@ -130,6 +134,8 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, "")
 		// Clear RL placeholders for non-DATA tables
 		clearRLPlaceholders(code)
+		// Clear BR placeholders for non-DATA tables
+		clearBRPlaceholders(code)
 	}
 
 	genErrorDuplicateKey(code, table)
@@ -915,5 +921,135 @@ func generateRLCascadeDeleteInBiz(table *model.Table) string {
 			helper.GetVarName(rlTable.Name)))
 	}
 
+	return buf.String()
+}
+
+func genBRBizMethods(code *string, table *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(table, table.Database.Tables)
+
+	if len(brTables) == 0 {
+		clearBRPlaceholders(code)
+		return
+	}
+
+	var methodsBuf strings.Builder
+
+	// 为每个BR表生成关系管理方法
+	for _, brTable := range brTables {
+		// 识别BR表连接的两个数据表
+		brRelated := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
+		if brRelated == nil {
+			continue
+		}
+
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		otherTableStructName := helper.GetStructName(otherTable.Name)
+		thisTableStructName := helper.GetStructName(table.Name)
+
+		// 生成Get{CurrentTable}Related{OtherTable}List方法，直接复用目标表的ListOption
+		methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Get%sRelated%sList(ctx context.Context, %sId uint64, opt *%sListOption) ([]*%sListBO, int64, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("opt", jgstr.JsonEncode(opt))
+	
+	// 转换biz层option为repo层option
+	related%ss, total, err := b.%sRepo.GetRelated%sList(ctx, %sId, &option.Related%sListOption{
+		Pagination: opt.Pagination,
+		Order: opt.Order,%s
+		Select: []interface{}{%s
+		},
+	})
+	if err != nil {
+		log.WithError(err).Error("fail to get related %s list")
+		return nil, 0, cerror.Internal(err.Error())
+	}
+	
+	// 转换为ListBO
+	result, err := b.To%sListBO(ctx, related%ss)
+	if err != nil {
+		log.WithError(err).Error("fail to convert %s models to %sListBO")
+		return nil, 0, cerror.Internal(err.Error())
+	}
+	return result, total, nil
+}
+`, thisTableStructName, otherTableStructName, // Get{CurrentTable}Related{OtherTable}List
+			helper.GetVarName(table.Name), otherTableStructName, otherTableStructName, // 参数
+			helper.GetVarName(table.Name), helper.GetVarName(table.Name), // log字段
+			otherTableStructName, thisTableStructName, otherTableStructName, helper.GetVarName(table.Name), otherTableStructName, // repo调用
+			generateBRBizFilterAssignmentDirect(otherTable),           // filter转换
+			generateBRBizSelectList(otherTable, otherTableStructName), // select字段（不带表名前缀）
+			otherTable.Name,                            // 错误日志
+			otherTableStructName, otherTableStructName, // BO转换
+			otherTable.Name, otherTableStructName)) // BO转换错误日志
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS, methodsBuf.String())
+}
+
+func clearBRPlaceholders(code *string) {
+	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS, "")
+}
+
+// generateBRBizFilterAssignmentDirect 生成biz层filter到repo层filter的转换赋值，直接使用目标表的ListOption
+func generateBRBizFilterAssignmentDirect(otherTable *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range otherTable.Columns {
+		if col.IsFilter {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString(fmt.Sprintf("\n\t\tFilter: &option.Related%sFilterOption{", helper.GetStructName(otherTable.Name)))
+	for _, col := range otherTable.Columns {
+		if col.IsFilter {
+			buf.WriteString(fmt.Sprintf("\n\t\t\t%s: opt.Filter.%s,",
+				helper.GetTableColName(col.Name),
+				helper.GetTableColName(col.Name),
+			))
+		}
+	}
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBRBizSelectList 生成target table的select字段列表（不带表名前缀，供biz层使用）
+func generateBRBizSelectList(table *model.Table, otherTableStructName string) string {
+	var buf strings.Builder
+	tableStructName := helper.GetStructName(table.Name)
+
+	for _, col := range table.Columns {
+		if col.IsHidden {
+			continue
+		}
+		if !col.IsList {
+			continue
+		}
+		// 生成不带表名前缀的select字段：model.ColRoleName（repo层会自动补全表名前缀）
+		buf.WriteString(fmt.Sprintf("\n\t\t\tmodel.Col%s%s,",
+			tableStructName,
+			helper.GetTableColName(col.Name),
+		))
+	}
 	return buf.String()
 }

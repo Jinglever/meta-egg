@@ -42,7 +42,7 @@ message Delete%%TABLE-NAME-STRUCT%%Request {
     uint64 id = 1 [(validate.rules).uint64 = {gte: 1}];
 }
 
-%%RL-MESSAGES%%`
+%%RL-MESSAGES%%%%BR-MESSAGES%%`
 
 var TplProtoMetaTableMessage = `// %%TABLE-NAME-STRUCT%%Detail %%TABLE-COMMENT%%详情
 message %%TABLE-NAME-STRUCT%%Detail {
@@ -81,7 +81,7 @@ var TplProtoDataTableHandlerFuncs = `    // 创建%%TABLE-COMMENT%%
     rpc Update%%TABLE-NAME-STRUCT%% (Update%%TABLE-NAME-STRUCT%%Request) returns (google.protobuf.Empty) {}
     // 删除%%TABLE-COMMENT%%
     rpc Delete%%TABLE-NAME-STRUCT%% (Delete%%TABLE-NAME-STRUCT%%Request) returns (google.protobuf.Empty) {}
-%%RL-HANDLER-FUNCTIONS%%`
+%%RL-HANDLER-FUNCTIONS%%%%BR-HANDLER-FUNCTIONS%%`
 
 var TplProtoMetaTableHandlerFuncs = `    // 获取%%TABLE-COMMENT%%详情
     rpc Get%%TABLE-NAME-STRUCT%%Detail (Get%%TABLE-NAME-STRUCT%%DetailRequest) returns (%%TABLE-NAME-STRUCT%%Detail) {}
@@ -172,4 +172,20 @@ var TplRLTableHandlerFuncs = `    // 添加%%RL-TABLE-COMMENT%%
     rpc Remove%%RL-TABLE-NAME-STRUCT%% (Remove%%RL-TABLE-NAME-STRUCT%%Request) returns (google.protobuf.Empty) {}
     // 获取所有%%RL-TABLE-COMMENT%%
     rpc GetAll%%RL-TABLE-NAME-STRUCT%% (GetAll%%RL-TABLE-NAME-STRUCT%%Request) returns (GetAll%%RL-TABLE-NAME-STRUCT%%Response) {}
+`
+
+// BR表相关的消息模板
+var TplBRTableMessage = `
+// Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%ListRequest 获取%%TABLE-COMMENT%%关联的%%OTHER-TABLE-COMMENT%%列表请求
+message Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%ListRequest {
+    // %%TABLE-COMMENT%%ID
+    uint64 %%TABLE-NAME-LOWER%%_id = 1 [(validate.rules).uint64 = {gte: 1}];
+    // 分页请求（可选, 不传则不分页）
+    optional Pagination pagination = 2;
+%%OTHER-COL-LIST-FOR-FILTER%%%%OTHER-COL-LIST-FOR-ORDER%%}
+`
+
+// BR表相关的gRPC方法模板
+var TplBRTableHandlerFuncs = `    // 获取%%TABLE-COMMENT%%关联的%%OTHER-TABLE-COMMENT%%列表
+    rpc Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List (Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%ListRequest) returns (Get%%OTHER-TABLE-NAME-STRUCT%%ListResponse) {}
 `

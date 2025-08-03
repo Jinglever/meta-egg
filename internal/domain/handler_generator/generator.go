@@ -173,6 +173,9 @@ func replaceTplForTable(code *string, table *model.Table) {
 		// 生成RL表相关内容
 		genRLDetailStructsAndFields(code, table)
 		genRLGRPCHandlerFunctions(code, table)
+		// 生成BR表相关内容
+		genBRHTTPHandlerFunctions(code, table)
+		genBRGRPCHandlerFunctions(code, table)
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, template.TplGRPCHandlerGetList)
@@ -204,6 +207,9 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
+		// META表不需要BR表支持
+		*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, "")
@@ -235,6 +241,9 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
+		// 其他表类型不需要BR表支持
+		*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
 	}
 
 	genAssignBOToVOGRPC(code, table)
@@ -2473,5 +2482,298 @@ func generateRLStructDefinition(rlTable *model.Table, structType string, onlyLis
 	}
 
 	buf.WriteString("}\n\n")
+	return buf.String()
+}
+
+// genBRHTTPHandlerFunctions 为DATA表生成BR关系的HTTP handler函数
+func genBRHTTPHandlerFunctions(code *string, mainTable *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range mainTable.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(mainTable, mainTable.Database.Tables)
+
+	if len(brTables) == 0 {
+		*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+		return
+	}
+
+	var brHandlerFuncsBuf strings.Builder
+
+	// 为每个BR表生成GET handler函数
+	for _, brTable := range brTables {
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, mainTable, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		// 生成handler函数
+		getFunc := template.TplBRHandlerGet
+
+		// 替换当前表相关的占位符
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(mainTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_VAR, helper.GetVarName(mainTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_URI, helper.GetURIName(mainTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_COMMENT, mainTable.Comment)
+
+		// 替换对方表相关的占位符
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_NAME_URI, helper.GetURIName(otherTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_NAME_VAR, helper.GetVarName(otherTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
+
+		// 生成对方表的筛选字段文档
+		otherFilterDoc := generateBRFilterDoc(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_COL_LIST_FOR_FILTER_DOC, otherFilterDoc)
+
+		// 生成对方表的排序字段文档
+		otherOrderDoc := generateBROrderDoc(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_COL_LIST_FOR_ORDER_DOC, otherOrderDoc)
+
+		// 生成筛选条件准备赋值
+		otherFilterPrepare := generateBRFilterPrepare(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_PREPARE_ASSIGN_FILTER_TO_OPTION, otherFilterPrepare)
+
+		// 生成筛选条件赋值
+		otherFilterAssign := generateBRFilterAssign(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_FILTER_ASSIGN_TO_OPTION, otherFilterAssign)
+
+		// 生成排序条件赋值
+		otherOrderAssign := generateBROrderAssign(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_ASSIGN_ORDER_TO_OPTION, otherOrderAssign)
+
+		brHandlerFuncsBuf.WriteString(getFunc)
+	}
+
+	*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, brHandlerFuncsBuf.String())
+}
+
+// generateBRFilterDoc 生成BR关系中对方表的筛选字段文档
+func generateBRFilterDoc(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+
+		gotype := helper.GetGoTypeForHandler(col)
+		gotype = strings.TrimPrefix(gotype, "*")
+		buf.WriteString(fmt.Sprintf("\n// @Param		%s			query		%s	false	\"%s\"",
+			col.Name,
+			gotype,
+			helper.GetCommentForHandler(col),
+		))
+	}
+	return buf.String()
+}
+
+// generateBRFilterAssign 生成BR关系中筛选条件的赋值代码
+func generateBRFilterAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString(fmt.Sprintf("\n\t\tFilter: &biz.%sFilterOption{", helper.GetStructName(table.Name)))
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,",
+			helper.GetTableColName(col.Name),
+			helper.GetStructName(col.Name),
+		))
+	}
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBROrderDoc 生成BR关系中对方表的排序字段文档
+func generateBROrderDoc(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	orderCols := make([]string, 0)
+	for _, col := range table.Columns {
+		if !col.IsOrder || col.IsHidden {
+			continue
+		}
+		orderCols = append(orderCols, col.Name)
+	}
+	buf.WriteString(fmt.Sprintf("\n// @Param		order_by		query		string	false	\"排序字段,可选:%s\"",
+		strings.Join(orderCols, "|"),
+	))
+	buf.WriteString("\n// @Param		order_type		query		string	false	\"排序类型,默认desc\"")
+	return buf.String()
+}
+
+// generateBRFilterPrepare 生成BR关系中筛选条件的准备赋值代码
+func generateBRFilterPrepare(table *model.Table) string {
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	// 这里可以添加准备逻辑，目前保持简单
+	return ""
+}
+
+// generateBROrderAssign 生成BR关系中排序条件的赋值代码
+func generateBROrderAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tOrder: &option.OrderOption{")
+	buf.WriteString("\n\t\t\tOrderBy:   req.OrderBy,")
+	buf.WriteString("\n\t\t\tOrderType: req.OrderType,")
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// genBRGRPCHandlerFunctions 为DATA表生成BR关系的gRPC handler函数
+func genBRGRPCHandlerFunctions(code *string, mainTable *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range mainTable.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(mainTable, mainTable.Database.Tables)
+
+	if len(brTables) == 0 {
+		*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
+		return
+	}
+
+	var brGrpcHandlerFuncsBuf strings.Builder
+
+	// 为每个BR表生成gRPC GET handler函数
+	for _, brTable := range brTables {
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, mainTable, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		// 生成gRPC handler函数
+		getFunc := template.TplGRPCBRHandlerGet
+
+		// 替换当前表相关的占位符
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(mainTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_TABLE_COMMENT, mainTable.Comment)
+
+		// 替换对方表相关的占位符
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
+
+		// 生成gRPC筛选条件赋值
+		otherFilterAssignGrpc := generateBRFilterAssignGRPC(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_FILTER_ASSIGN_TO_OPTION_GRPC, otherFilterAssignGrpc)
+
+		// 生成gRPC排序条件赋值
+		otherOrderAssignGrpc := generateBROrderAssignGRPC(otherTable)
+		getFunc = strings.ReplaceAll(getFunc, template.PH_OTHER_ASSIGN_ORDER_TO_OPTION_GRPC, otherOrderAssignGrpc)
+
+		brGrpcHandlerFuncsBuf.WriteString(getFunc)
+	}
+
+	*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, brGrpcHandlerFuncsBuf.String())
+}
+
+// generateBRFilterAssignGRPC 生成BR关系中gRPC筛选条件的赋值代码
+func generateBRFilterAssignGRPC(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tFilter: &biz.")
+	buf.WriteString(helper.GetStructName(table.Name))
+	buf.WriteString("FilterOption{")
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,",
+			helper.GetTableColName(col.Name),
+			helper.GetStructName(col.Name),
+		))
+	}
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBROrderAssignGRPC 生成BR关系中gRPC排序条件的赋值代码
+func generateBROrderAssignGRPC(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tOrder: &option.OrderOption{")
+	buf.WriteString("\n\t\t\tOrderBy:   req.OrderBy,")
+	buf.WriteString("\n\t\t\tOrderType: req.OrderType,")
+	buf.WriteString("\n\t\t},")
 	return buf.String()
 }

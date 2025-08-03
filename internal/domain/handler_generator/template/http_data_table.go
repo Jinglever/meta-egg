@@ -248,6 +248,7 @@ func (h *Handler) Get%%TABLE-NAME-STRUCT%%Detail(c *gin.Context) {
 %%TPL-HTTP-HANDLER-DELETE%%
 
 %%RL-HANDLER-FUNCTIONS%%
+%%BR-HTTP-HANDLER-FUNCTIONS%%
 `
 
 // RL表操作函数模板
@@ -349,3 +350,61 @@ func (h *Handler) GetAll%%RL-TABLE-NAME-STRUCT%%(c *gin.Context) {
 	}
 	ResponseSuccess(c, list)
 }`
+
+// BR表操作函数模板
+var TplBRHandlerGet string = `
+// @Id			Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List
+// @Tags		%%TABLE-COMMENT%%
+// @Summary	获取%%TABLE-COMMENT%%关联的%%OTHER-TABLE-COMMENT%%列表
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string	true	"Bearer <jwt-token>"
+// @Param		%%TABLE-NAME-VAR%%_id			path		int		true	"%%TABLE-COMMENT%%ID"
+// @Param		page			query		int		true	"页码, 从1开始"
+// @Param		page_size		query		int		true	"每页数量, 要求大于0"%%OTHER-COL-LIST-FOR-FILTER-DOC%%%%OTHER-COL-LIST-FOR-ORDER-DOC%%
+// @Success	200				{object}	RspData{data=%%OTHER-TABLE-NAME-STRUCT%%List}
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%%TABLE-NAME-URI%%/{%%TABLE-NAME-VAR%%_id}/%%OTHER-TABLE-NAME-URI%% [get]
+func (h *Handler) Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List(c *gin.Context) {
+	%%TABLE-NAME-VAR%%Id := jgstr.UintVal(c.Param("%%TABLE-NAME-VAR%%_id"))
+	var req ReqGet%%OTHER-TABLE-NAME-STRUCT%%List
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%%TABLE-NAME-VAR%%_id", %%TABLE-NAME-VAR%%Id).
+		WithField("req", jgstr.JsonEncode(req))
+
+	// 构建查询选项%%OTHER-PREPARE-ASSIGN-FILTER-TO-OPTION%%
+	opt := &biz.%%OTHER-TABLE-NAME-STRUCT%%ListOption{
+		Pagination: &option.PaginationOption{
+			Page:     req.Page,
+			PageSize: req.PageSize,
+		},%%OTHER-ASSIGN-ORDER-TO-OPTION%%%%OTHER-FILTER-ASSIGN-TO-OPTION%%
+	}
+	
+	%%OTHER-TABLE-NAME-VAR%%BOs, total, err := h.BizService.Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List(ctx, %%TABLE-NAME-VAR%%Id, opt)
+	if err != nil {
+		log.WithError(err).Error("BizService.Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List failed")
+		ResponseFail(c, err)
+		return
+	}
+	
+	list, err := h.To%%OTHER-TABLE-NAME-STRUCT%%ListInfo(ctx, %%OTHER-TABLE-NAME-VAR%%BOs)
+	if err != nil {
+		log.WithError(err).Error("convert %%OTHER-TABLE-NAME-STRUCT%%ListBO to %%OTHER-TABLE-NAME-STRUCT%%ListInfo failed")
+		ResponseFail(c, err)
+		return
+	}
+	
+	ResponseSuccess(c, %%OTHER-TABLE-NAME-STRUCT%%List{
+		List:  list,
+		Total: total,
+	})
+}
+`

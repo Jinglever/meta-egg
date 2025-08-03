@@ -177,4 +177,6 @@ func (b *BizService) Get%%TABLE-NAME-STRUCT%%ByID(ctx context.Context, id uint64
 %%TPL-FUNC-UPDATE%%
 %%TPL-FUNC-DELETE%%
 %%RL-METHODS%%
+%%BR-OPTIONS%%
+%%BR-METHODS%%
 `

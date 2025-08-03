@@ -173,6 +173,15 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	// Generate RL table related code for DATA tables
 	genRLMethods(code, table)
 
+	// Generate BR table related code for DATA tables
+	genBRMethods(code, table)
+
+	// Generate BR table option structures for DATA tables
+	genBROptions(code, table)
+
+	// Generate BR table repo interface and implementation for DATA tables
+	genBRRepoMethods(code, table)
+
 	if table.Type == model.TableType_META {
 		metaRecords, err := helper.GetMetaRecords(table, eCols, dbOper)
 		if err != nil {
@@ -667,4 +676,344 @@ func generateRLBatchDeleteLogic(rlTable *model.Table, rlStructName string) strin
 		return result.Error
 	}`, rlStructName)
 	}
+}
+
+// genBRMethods 生成BR表相关的方法（接口和实现）
+// 注意：BR方法现在直接在internal层实现，不再需要gen层的胶水方法
+func genBRMethods(code *string, table *model.Table) {
+	// 不再生成gen层的BR方法，所有逻辑已合并到internal层
+	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS_INTERFACE, "")
+	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS_IMPLEMENTATION, "")
+}
+
+// genBROptions 生成BR表相关的option结构（在option模板中使用）
+func genBROptions(code *string, table *model.Table) {
+	// 只为DATA表生成BR option结构
+	if table.Type != model.TableType_DATA {
+		*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 检查当前表是否作为某些BR表的目标表
+	isTargetInBR := false
+	for _, t := range table.Database.Tables {
+		if t.Type == model.TableType_BR {
+			brRelatedTables := helper.IdentifyBRRelatedTables(t, tableNameToTable)
+			if brRelatedTables != nil && (brRelatedTables.Table1 == table || brRelatedTables.Table2 == table) {
+				isTargetInBR = true
+				break
+			}
+		}
+	}
+
+	if !isTargetInBR {
+		// 如果当前表不是任何BR表的目标表，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+		return
+	}
+
+	var optionsBuf strings.Builder
+	currentTableStructName := helper.GetStructName(table.Name)
+
+	// 为当前表生成一组BR filter选项（供所有指向该表的BR关系使用）
+	optionsBuf.WriteString(fmt.Sprintf(`
+type Related%sFilterOption struct {%s
+}
+
+func (o *Related%sFilterOption) GetRepoOptions() []gormx.Option {
+	ops := make([]gormx.Option, 0)%s
+	return ops
+}
+
+type Related%sListOption struct {
+	Pagination *PaginationOption
+	Order      *OrderOption
+	Filter     *Related%sFilterOption
+	Select     []interface{} // select columns, such as []interface{}{"id", "name"}
+}
+`, currentTableStructName, generateBRFilterFields(table), // FilterOption定义 - 使用当前表的字段
+		currentTableStructName, generateBRFilterRepoOptions(table), // GetRepoOptions方法实现 - 使用当前表的字段
+		currentTableStructName,  // ListOption定义
+		currentTableStructName)) // Filter字段类型
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, optionsBuf.String())
+}
+
+// generateBRFilterFields 生成目标表的filter字段定义（用于BR关系查询）
+func generateBRFilterFields(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if col.IsFilter {
+			gotype, err := helper.GetGoType(col)
+			if err != nil {
+				continue
+			}
+			if !helper.IsGoTypeNullable(gotype) {
+				gotype = "*" + gotype
+			}
+			buf.WriteString(fmt.Sprintf("\n\t%s %s // %s",
+				helper.GetTableColName(col.Name),
+				gotype,
+				col.Comment,
+			))
+		}
+	}
+	return buf.String()
+}
+
+// generateBRFilterRepoOptions 生成目标表的filter的GetRepoOptions方法实现（用于BR关系查询）
+// 这里会使用表名前缀来处理JOIN查询
+func generateBRFilterRepoOptions(table *model.Table) string {
+	var buf strings.Builder
+	tableNameVar := helper.GetVarName(table.Name) // 使用统一的变量命名风格
+	tableStructName := helper.GetStructName(table.Name)
+
+	// 检查是否有filter字段
+	hasFilterFields := false
+	for _, col := range table.Columns {
+		if col.IsFilter {
+			hasFilterFields = true
+			break
+		}
+	}
+
+	// 只有在有filter字段时才生成表名变量定义
+	if hasFilterFields {
+		buf.WriteString(fmt.Sprintf("\n\t%sTableName := (&model.%s{}).TableName()", tableNameVar, tableStructName))
+	}
+
+	for _, col := range table.Columns {
+		if col.IsFilter {
+			buf.WriteString(fmt.Sprintf("\n\tif o.%s != nil {", helper.GetTableColName(col.Name)))
+			// 使用变量注入方式生成带表名前缀的字段名，例如 roleTableName+"."+model.ColRoleName+" = ?"
+			buf.WriteString(fmt.Sprintf("\n\t\tops = append(ops, gormx.Where(%sTableName+\".\"+model.Col%s%s+\" = ?\", *o.%s))",
+				tableNameVar,
+				tableStructName,
+				helper.GetTableColName(col.Name),
+				helper.GetTableColName(col.Name),
+			))
+			buf.WriteString("\n\t}")
+		}
+	}
+	return buf.String()
+}
+
+// genBRRepoMethods 生成BR表相关的repo接口和实现方法（在internal repo模板中使用）
+func genBRRepoMethods(code *string, table *model.Table) {
+	// 只为DATA表生成BR repo方法
+	if table.Type != model.TableType_DATA {
+		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前主表的所有BR表
+	brTables := helper.GetMainTableBRs(table, table.Database.Tables)
+
+	if len(brTables) == 0 {
+		// 如果没有BR表，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, "")
+		return
+	}
+
+	var interfaceBuf, implBuf strings.Builder
+
+	// 为每个BR表生成方法
+	for _, brTable := range brTables {
+		// 识别BR表连接的两个DATA表
+		brRelatedTables := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
+		if brRelatedTables == nil {
+			continue // 跳过无效的BR表
+		}
+
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		// 确定当前表和目标表的外键信息
+		var thisTableFKColumn *model.Column
+		var otherTableFKColumn *model.Column
+
+		if brRelatedTables.Table1.Name == table.Name {
+			// 当前表是Table1，另一边是Table2
+			thisTableFKColumn = brRelatedTables.Table1FK
+			otherTableFKColumn = brRelatedTables.Table2FK
+		} else if brRelatedTables.Table2.Name == table.Name {
+			// 当前表是Table2，另一边是Table1
+			thisTableFKColumn = brRelatedTables.Table2FK
+			otherTableFKColumn = brRelatedTables.Table1FK
+		} else {
+			// 当前表不在这个BR关系中，跳过
+			continue
+		}
+
+		otherTableStructName := helper.GetStructName(otherTable.Name)
+		thisTableStructName := helper.GetStructName(table.Name)
+		brTableStructName := helper.GetStructName(brTable.Name)
+
+		// 生成字段名
+		thisTableFKFieldName := helper.GetTableColName(thisTableFKColumn.Name)
+		otherTableFKFieldName := helper.GetTableColName(otherTableFKColumn.Name)
+		otherTablePKFieldName := helper.GetTableColName(otherTable.PrimaryColumn.Name)
+
+		// 生成表名变量（用于表名前缀）
+		otherTableNameVar := helper.GetVarName(otherTable.Name)
+		brTableNameVar := helper.GetVarName(brTable.Name)
+
+		// 生成接口方法 - 返回 (entities, total, error) 匹配主表GetList模式
+		interfaceBuf.WriteString(fmt.Sprintf(`
+	GetRelated%sList(ctx context.Context, thisId uint64, opt *option.Related%sListOption) ([]*model.%s, int64, error)`,
+			otherTableStructName, otherTableStructName, otherTableStructName))
+
+		// 生成实现方法
+		implBuf.WriteString(fmt.Sprintf(`
+func (r *%sRepoImpl) GetRelated%sList(ctx context.Context, thisId uint64, opt *option.Related%sListOption) ([]*model.%s, int64, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("thisId", thisId).
+		WithField("opt", jgstr.JsonEncode(opt))
+	
+	// 构建gormx选项数组
+	opts := make([]gormx.Option, 0)
+	
+	// 添加JOIN和WHERE条件
+	%sTableName := (&model.%s{}).TableName()
+	%sTableName := (&model.%s{}).TableName()
+	
+	// 添加INNER JOIN
+	joinSQL := "INNER JOIN " + %sTableName + " ON " + %sTableName + "." + model.Col%s%s + " = " + %sTableName + "." + model.Col%s%s
+	opts = append(opts, gormx.Join(joinSQL))
+	
+	// 添加WHERE条件
+	whereSQL := %sTableName + "." + model.Col%s%s + " = ?"
+	opts = append(opts, gormx.Where(whereSQL, thisId))
+	
+	// 处理Filter选项
+	if opt != nil && opt.Filter != nil {
+		filterOpts := opt.Filter.GetRepoOptions()
+		opts = append(opts, filterOpts...)
+	}
+	
+	// 处理Order选项
+	if opt != nil && opt.Order != nil {
+		validOrderby := []string{%s
+		}
+		orderOpts := opt.Order.GetRepoOptions(validOrderby)
+		opts = append(opts, orderOpts...)
+	}
+	
+	// 先计算总数（不包含分页和Select）
+	var total int64
+	tx := r.GetTX(ctx).Model(&model.%s{})
+	for _, option := range opts {
+		tx = option(tx)
+	}
+	result := tx.Count(&total)
+	if result.Error != nil {
+		log.WithError(result.Error).Error("fail to count related %s list")
+		return nil, 0, result.Error
+	}
+	if total == 0 {
+		return make([]*model.%s, 0), 0, nil
+	}
+	
+	// 处理Pagination选项
+	if opt != nil && opt.Pagination != nil {
+		paginationOpts := opt.Pagination.GetRepoOptions()
+		opts = append(opts, paginationOpts...)
+	}
+	
+	// 处理Select选项（补全表名前缀）
+	if opt != nil && len(opt.Select) > 0 {
+		selectFields := make([]interface{}, len(opt.Select))
+		for i, field := range opt.Select {
+			if fieldStr, ok := field.(string); ok {
+				// 补全表名前缀
+				selectFields[i] = %sTableName + "." + fieldStr
+			} else {
+				selectFields[i] = field
+			}
+		}
+		opts = append(opts, gormx.Select(selectFields...))
+	}
+	
+	// 执行查询，获取对方表数据
+	var results []*model.%s
+	tx = r.GetTX(ctx)
+	for _, option := range opts {
+		tx = option(tx)
+	}
+	if err := tx.Find(&results).Error; err != nil {
+		log.WithError(err).Error("fail to get related %s list")
+		return nil, 0, err
+	}
+	
+	return results, total, nil
+}
+`, thisTableStructName, otherTableStructName, otherTableStructName, otherTableStructName, // 函数签名
+			otherTableNameVar, otherTableStructName, // 对方表名变量定义
+			brTableNameVar, brTableStructName, // BR表名变量定义
+			brTableNameVar, brTableNameVar, // JOIN条件：BR表与BR表
+			brTableStructName, otherTableFKFieldName, // BR表中指向对方表的外键
+			otherTableNameVar, otherTableStructName, otherTablePKFieldName, // 对方表主键
+			brTableNameVar, brTableStructName, thisTableFKFieldName, // WHERE条件：BR表中当前表外键
+			generateBROrderByListWithTablePrefix(otherTable, otherTableNameVar), // orderBy列表
+			otherTableStructName, // count Model：对方表
+			otherTable.Name,      // count错误日志
+			otherTableStructName, // 空结果类型
+			otherTableNameVar,    // Select字段表名前缀
+			otherTableStructName, // results类型
+			otherTable.Name))     // 查询错误日志
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, interfaceBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, implBuf.String())
+}
+
+// generateBROrderByList 生成目标表的orderBy列表（用于BR关系查询的验证）
+func generateBROrderByList(table *model.Table) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if !col.IsOrder {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\tmodel.Col%s%s,",
+			helper.GetStructName(table.Name),
+			helper.GetTableColName(col.Name),
+		))
+	}
+	return buf.String()
+}
+
+// generateBROrderByListWithTablePrefix 生成带表名前缀的orderBy列表（用于BR关系查询的验证）
+func generateBROrderByListWithTablePrefix(table *model.Table, tableNameVar string) string {
+	var buf strings.Builder
+	for _, col := range table.Columns {
+		if !col.IsOrder {
+			continue
+		}
+		// 使用变量注入方式生成带表名前缀的字段名，例如 roleTableName+"."+model.ColRoleName
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%sTableName+\".\"+model.Col%s%s,",
+			tableNameVar,
+			helper.GetStructName(table.Name),
+			helper.GetTableColName(col.Name),
+		))
+	}
+	return buf.String()
 }

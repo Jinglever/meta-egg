@@ -214,6 +214,14 @@ func (d *Database) Validate() error {
 			}
 		}
 
+		// BR表验证
+		if table.Type == TableType_BR {
+			err := validateBRTable(table, tableNameToTable)
+			if err != nil {
+				return err
+			}
+		}
+
 		// todo 检查外链和索引是否有重复
 		// todo 检查联合索引和联合唯一索引是否有重复
 	}
@@ -465,5 +473,72 @@ func identifyRLMainTable(rlTable *Table, tableNameToTable map[string]*Table) *Ta
 	}
 
 	// 没有任何DATA类型外键
+	return nil
+}
+
+// validateBRTable 验证BR表的外键关系
+func validateBRTable(brTable *Table, tableNameToTable map[string]*Table) error {
+	var dataForeignKeys []*ForeignKey
+	var mainMarkedCount int
+
+	// 收集所有指向DATA表的外键
+	for _, column := range brTable.Columns {
+		for _, fk := range column.ForeignKeys {
+			// 检查是否有is_main标记（BR表不应该有主外键概念）
+			if fk.IsMain {
+				mainMarkedCount++
+			}
+
+			// 收集指向DATA表的外键
+			if targetTable := tableNameToTable[fk.Table]; targetTable != nil && targetTable.Type == TableType_DATA {
+				dataForeignKeys = append(dataForeignKeys, fk)
+			}
+		}
+	}
+
+	// BR表不应该有is_main标记的外键（因为是多对多关系，没有主表概念）
+	if mainMarkedCount > 0 {
+		log.Errorf("br table (%s) should not have foreign keys marked as is_main (many-to-many relationship has no main table)", brTable.Name)
+		return fmt.Errorf("br table (%s) should not have foreign keys marked as is_main (many-to-many relationship has no main table)", brTable.Name)
+	}
+
+	// BR表必须恰好有两个指向DATA表的外键
+	if len(dataForeignKeys) != 2 {
+		log.Errorf("br table (%s) must have exactly 2 foreign keys pointing to DATA tables, but got %d", brTable.Name, len(dataForeignKeys))
+		return fmt.Errorf("br table (%s) must have exactly 2 foreign keys pointing to DATA tables, but got %d", brTable.Name, len(dataForeignKeys))
+	}
+
+	// 确保两个外键指向不同的DATA表
+	table1Name := dataForeignKeys[0].Table
+	table2Name := dataForeignKeys[1].Table
+	if table1Name == table2Name {
+		log.Errorf("br table (%s) has two foreign keys pointing to the same DATA table (%s), they must point to different tables", brTable.Name, table1Name)
+		return fmt.Errorf("br table (%s) has two foreign keys pointing to the same DATA table (%s), they must point to different tables", brTable.Name, table1Name)
+	}
+
+	// 验证两个目标表都存在且都是DATA类型
+	table1 := tableNameToTable[table1Name]
+	table2 := tableNameToTable[table2Name]
+
+	if table1 == nil {
+		log.Errorf("br table (%s) foreign key points to non-existent table (%s)", brTable.Name, table1Name)
+		return fmt.Errorf("br table (%s) foreign key points to non-existent table (%s)", brTable.Name, table1Name)
+	}
+
+	if table2 == nil {
+		log.Errorf("br table (%s) foreign key points to non-existent table (%s)", brTable.Name, table2Name)
+		return fmt.Errorf("br table (%s) foreign key points to non-existent table (%s)", brTable.Name, table2Name)
+	}
+
+	if table1.Type != TableType_DATA {
+		log.Errorf("br table (%s) foreign key points to non-DATA table (%s) of type %s", brTable.Name, table1Name, table1.Type)
+		return fmt.Errorf("br table (%s) foreign key points to non-DATA table (%s) of type %s", brTable.Name, table1Name, table1.Type)
+	}
+
+	if table2.Type != TableType_DATA {
+		log.Errorf("br table (%s) foreign key points to non-DATA table (%s) of type %s", brTable.Name, table2Name, table2.Type)
+		return fmt.Errorf("br table (%s) foreign key points to non-DATA table (%s) of type %s", brTable.Name, table2Name, table2.Type)
+	}
+
 	return nil
 }

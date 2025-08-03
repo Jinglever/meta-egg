@@ -298,10 +298,14 @@ func genHandlerMessage(code *string, project *model.Project, table *model.Table)
 		replaceTplForTable(&str, table)
 		// 添加RL表支持
 		genRLFieldsAndMessages(&str, table, project)
+		// 添加BR表支持
+		genBRMessages(&str, table, project)
 		buf.WriteString(str)
 	} else if table.Type == model.TableType_META {
 		str := template.TplProtoMetaTableMessage
 		replaceTplForTable(&str, table)
+		// META表不需要BR表支持
+		genBRMessages(&str, table, project) // 会清空BR占位符
 		buf.WriteString(str)
 	}
 	*code = strings.ReplaceAll(*code, template.PH_HANDLER_MESSAGE, buf.String())
@@ -324,10 +328,14 @@ func genHandlerFunction(code *string, project *model.Project) {
 				replaceTplForTable(&str, table)
 				// 添加RL表gRPC方法
 				genRLHandlerFunctions(&str, table, project)
+				// 添加BR表gRPC方法
+				genBRHandlerFunctions(&str, table, project)
 				buf.WriteString(str)
 			} else if table.Type == model.TableType_META {
 				str := template.TplProtoMetaTableHandlerFuncs
 				replaceTplForTable(&str, table)
+				// META表不需要BR表支持
+				genBRHandlerFunctions(&str, table, project) // 会清空BR占位符
 				buf.WriteString(str)
 			}
 		}
@@ -581,4 +589,192 @@ func genRLFieldsForCreate(rlTable *model.Table, startFieldIndex int) string {
 	}
 
 	return buf.String()
+}
+
+// genBRMessages 为DATA表生成BR关系的protobuf消息
+func genBRMessages(code *string, table *model.Table, project *model.Project) {
+	if project.Database == nil {
+		// 清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range project.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(table, project.Database.Tables)
+
+	if len(brTables) == 0 {
+		*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, "")
+		return
+	}
+
+	var messagesBuf strings.Builder
+
+	// 为每个BR表生成相关消息
+	for _, brTable := range brTables {
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		// 生成请求消息
+		requestMsg := template.TplBRTableMessage
+
+		// 替换当前表相关的占位符
+		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(table.Name))
+		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_COMMENT, table.Comment)
+		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_NAME_LOWER, helper.GetDirName(table.Name))
+
+		// 替换对方表相关的占位符
+		requestMsg = strings.ReplaceAll(requestMsg, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
+		requestMsg = strings.ReplaceAll(requestMsg, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
+
+		// 生成对方表的筛选字段
+		cnt := 3 // 从3开始，因为已经有id=1, pagination=2
+		cnt = genOtherColListForFilter(&requestMsg, otherTable, cnt)
+		cnt = genOtherColListForOrder(&requestMsg, otherTable, cnt)
+
+		messagesBuf.WriteString(requestMsg)
+	}
+
+	*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, messagesBuf.String())
+}
+
+// genBRHandlerFunctions 为DATA表生成BR关系的gRPC方法
+func genBRHandlerFunctions(code *string, table *model.Table, project *model.Project) {
+	if project.Database == nil {
+		// 清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range project.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(table, project.Database.Tables)
+
+	if len(brTables) == 0 {
+		*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, "")
+		return
+	}
+
+	var handlerFuncsBuf strings.Builder
+
+	// 为每个BR表生成gRPC方法
+	for _, brTable := range brTables {
+		// 获取对方表
+		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
+		if otherTable == nil {
+			continue
+		}
+
+		// 生成gRPC方法
+		handlerFunc := template.TplBRTableHandlerFuncs
+
+		// 替换当前表相关的占位符
+		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(table.Name))
+		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_TABLE_COMMENT, table.Comment)
+
+		// 替换对方表相关的占位符
+		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
+		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
+
+		handlerFuncsBuf.WriteString(handlerFunc)
+	}
+
+	*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, handlerFuncsBuf.String())
+}
+
+// genOtherColListForFilter 生成对方表的筛选字段（protobuf格式）
+func genOtherColListForFilter(code *string, table *model.Table, startCnt int) int {
+	var buf strings.Builder
+	cnt := startCnt
+
+	// 检查是否有筛选字段
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+
+	if !hasFilterCol {
+		*code = strings.ReplaceAll(*code, template.PH_OTHER_COL_LIST_FOR_FILTER, "")
+		return cnt
+	}
+
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		colType, err := helper.GetProto3ValueType(col)
+		if err != nil {
+			log.Fatalf("fail to get to type: %v", err)
+		}
+		colType = "optional " + colType
+		// comment
+		buf.WriteString(fmt.Sprintf("    // 筛选条件: %s (可选)\n", helper.GetCommentForHandler(col)))
+		buf.WriteString(fmt.Sprintf("    %s %s = %d%s;\n",
+			colType,
+			helper.GetDirName(col.Name),
+			cnt,
+			helper.GetProto3ValidateRule(col),
+		))
+		cnt++
+	}
+
+	*code = strings.ReplaceAll(*code, template.PH_OTHER_COL_LIST_FOR_FILTER, buf.String())
+	return cnt
+}
+
+// genOtherColListForOrder 生成对方表的排序字段（protobuf格式）
+func genOtherColListForOrder(code *string, table *model.Table, startCnt int) int {
+	var buf strings.Builder
+	cnt := startCnt
+
+	// 检查是否有排序字段
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+
+	if !hasOrderCol {
+		*code = strings.ReplaceAll(*code, template.PH_OTHER_COL_LIST_FOR_ORDER, "")
+		return cnt
+	}
+
+	orderCols := make([]string, 0)
+	for _, col := range table.Columns {
+		if !col.IsOrder || col.IsHidden {
+			continue
+		}
+		orderCols = append(orderCols, col.Name)
+	}
+	buf.WriteString(fmt.Sprintf("    // 排序字段, 可选: %s\n",
+		strings.Join(orderCols, ", ")))
+	buf.WriteString(fmt.Sprintf("    optional string order_by = %d [(validate.rules).string = {in: [\"%s\"]}];\n",
+		cnt,
+		strings.Join(orderCols, "\", \""),
+	))
+	cnt++
+	buf.WriteString("    // 排序方式, 默认 desc, 可选: asc, desc\n")
+	buf.WriteString(fmt.Sprintf("    optional string order_type = %d [(validate.rules).string = {in: [\"asc\", \"desc\"]}];\n", cnt))
+	cnt++
+
+	*code = strings.ReplaceAll(*code, template.PH_OTHER_COL_LIST_FOR_ORDER, buf.String())
+	return cnt
 }

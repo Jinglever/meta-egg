@@ -59,6 +59,7 @@ type %%TABLE-NAME-STRUCT%%Repo interface {
 	DeleteByIDs(ctx context.Context, ids []uint64) (rowsAffected int64, err error)
 	Count(ctx context.Context, opts ...gormx.Option) (count int64, err error)
 %%RL-METHODS-INTERFACE%%
+%%BR-METHODS-INTERFACE%%
 }
 
 type %%TABLE-NAME-STRUCT%%RepoImpl struct {
@@ -205,4 +206,6 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Count(ctx context.Context, opts ...gormx
 }
 
 %%RL-METHODS-IMPLEMENTATION%%
+
+%%BR-METHODS-IMPLEMENTATION%%
 `
