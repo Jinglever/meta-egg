@@ -111,7 +111,7 @@ func (b *BizService) Delete%%TABLE-NAME-STRUCT%%ByID(ctx context.Context, id uin
 		WithField("id", id)
 	return b.Resource.DB.Transaction(ctx, func(txCtx context.Context) error {
 		var err error
-		%%RL-CASCADE-DELETE-IN-BIZ%%
+		%%RL-CASCADE-DELETE-IN-BIZ%%%%BR-CASCADE-UNBIND-IN-BIZ%%
 		_, err = b.%%TABLE-NAME-STRUCT%%Repo.DeleteByID(txCtx, id)
 		if err != nil {
 			log.WithError(err).Error("fail to delete %%TABLE-NAME%%")

@@ -69,9 +69,19 @@ func Generate(codeDir string, project *model.Project) (relativeDir2NeedConfirm m
 			if !table.HasHandler { // 由于biz里的代码都是面向handler的, 所以handler不开启的情况下, biz也不要生成
 				continue
 			}
+
+			var tpl string
+			if table.Type == model.TableType_BR {
+				// BR表使用专用模板
+				tpl = template.TplBRTable
+			} else {
+				// 其他表使用通用模板
+				tpl = template.TplTable
+			}
+
 			// internal/biz/<table>.go
 			path = filepath.Join(codeDir, "internal", "biz", helper.GetDirName(table.Name)+".go")
-			err = generateGoFileForTable(path, template.TplTable, table, helper.AddHeaderCanEdit)
+			err = generateGoFileForTable(path, tpl, table, helper.AddHeaderCanEdit)
 			if err != nil {
 				log.Errorf("generate internal/biz/%s.go failed: %v",
 					helper.GetDirName(table.Name), err)
@@ -116,8 +126,15 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_DELETE, template.TplFuncDelete)
 		// Generate RL table related code for DATA tables
 		genRLBizMethods(code, table)
-		// Generate BR table related code for DATA tables
+		// Generate BR table related code for DATA tables (now empty since BR tables have their own biz files)
 		genBRBizMethods(code, table)
+		// Generate BR cascade unbind logic for DATA tables
+		genBRCascadeUnbindInBiz(code, table)
+	} else if table.Type == model.TableType_BR {
+		// Generate BR table's own relation methods
+		genBRTableBizMethods(code, table)
+		// Clear BR cascade unbind placeholder for BR tables
+		*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, "")
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, template.TplFuncGetList)
@@ -127,6 +144,8 @@ func replaceTplForTable(code *string, table *model.Table) {
 		clearRLPlaceholders(code)
 		// Clear BR placeholders for non-DATA tables
 		clearBRPlaceholders(code)
+		// Clear BR cascade unbind placeholder for META tables
+		*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, "")
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_FUNC_GET_LIST, "")
@@ -136,6 +155,8 @@ func replaceTplForTable(code *string, table *model.Table) {
 		clearRLPlaceholders(code)
 		// Clear BR placeholders for non-DATA tables
 		clearBRPlaceholders(code)
+		// Clear BR cascade unbind placeholder for other table types
+		*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, "")
 	}
 
 	genErrorDuplicateKey(code, table)
@@ -925,88 +946,18 @@ func generateRLCascadeDeleteInBiz(table *model.Table) string {
 }
 
 func genBRBizMethods(code *string, table *model.Table) {
-	// 构建表名到表的映射
-	tableNameToTable := make(map[string]*model.Table)
-	for _, t := range table.Database.Tables {
-		tableNameToTable[t.Name] = t
-	}
-
-	// 获取当前表的所有BR表关系
-	brTables := helper.GetMainTableBRs(table, table.Database.Tables)
-
-	if len(brTables) == 0 {
-		clearBRPlaceholders(code)
-		return
-	}
-
-	var methodsBuf strings.Builder
-
-	// 为每个BR表生成关系管理方法
-	for _, brTable := range brTables {
-		// 识别BR表连接的两个数据表
-		brRelated := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
-		if brRelated == nil {
-			continue
-		}
-
-		// 获取对方表
-		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
-		if otherTable == nil {
-			continue
-		}
-
-		otherTableStructName := helper.GetStructName(otherTable.Name)
-		thisTableStructName := helper.GetStructName(table.Name)
-
-		// 生成Get{CurrentTable}Related{OtherTable}List方法，直接复用目标表的ListOption
-		methodsBuf.WriteString(fmt.Sprintf(`
-func (b *BizService) Get%sRelated%sList(ctx context.Context, %sId uint64, opt *%sListOption) ([]*%sListBO, int64, error) {
-	log := contexts.GetLogger(ctx).
-		WithField("%sId", %sId).
-		WithField("opt", jgstr.JsonEncode(opt))
-	
-	// 转换biz层option为repo层option
-	related%ss, total, err := b.%sRepo.GetRelated%sList(ctx, %sId, &option.Related%sListOption{
-		Pagination: opt.Pagination,
-		Order: opt.Order,%s
-		Select: []interface{}{%s
-		},
-	})
-	if err != nil {
-		log.WithError(err).Error("fail to get related %s list")
-		return nil, 0, cerror.Internal(err.Error())
-	}
-	
-	// 转换为ListBO
-	result, err := b.To%sListBO(ctx, related%ss)
-	if err != nil {
-		log.WithError(err).Error("fail to convert %s models to %sListBO")
-		return nil, 0, cerror.Internal(err.Error())
-	}
-	return result, total, nil
-}
-`, thisTableStructName, otherTableStructName, // Get{CurrentTable}Related{OtherTable}List
-			helper.GetVarName(table.Name), otherTableStructName, otherTableStructName, // 参数
-			helper.GetVarName(table.Name), helper.GetVarName(table.Name), // log字段
-			otherTableStructName, thisTableStructName, otherTableStructName, helper.GetVarName(table.Name), otherTableStructName, // repo调用
-			generateBRBizFilterAssignmentDirect(otherTable),           // filter转换
-			generateBRBizSelectList(otherTable, otherTableStructName), // select字段（不带表名前缀）
-			otherTable.Name,                            // 错误日志
-			otherTableStructName, otherTableStructName, // BO转换
-			otherTable.Name, otherTableStructName)) // BO转换错误日志
-	}
-
-	// 替换占位符
-	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
-	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS, methodsBuf.String())
+	// 不再在主表中生成BR方法，因为BR表有自己的biz文件
+	// 清空BR方法占位符
+	clearBRPlaceholders(code)
 }
 
 func clearBRPlaceholders(code *string) {
 	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
 	*code = strings.ReplaceAll(*code, template.PH_BR_METHODS, "")
+	// 注意：不要在这里清除PH_BR_CASCADE_UNBIND_IN_BIZ，因为它需要在genBRCascadeUnbindInBiz中处理
 }
 
-// generateBRBizFilterAssignmentDirect 生成biz层filter到repo层filter的转换赋值，直接使用目标表的ListOption
+// generateBRBizFilterAssignmentDirect 生成biz层filter到repo层filter的转换赋值，使用现有的XxxFilterOption
 func generateBRBizFilterAssignmentDirect(otherTable *model.Table) string {
 	var buf strings.Builder
 	hasFilterCol := false
@@ -1020,7 +971,7 @@ func generateBRBizFilterAssignmentDirect(otherTable *model.Table) string {
 		return ""
 	}
 
-	buf.WriteString(fmt.Sprintf("\n\t\tFilter: &option.Related%sFilterOption{", helper.GetStructName(otherTable.Name)))
+	buf.WriteString(fmt.Sprintf("\n\t\tFilter: &option.%sFilterOption{", helper.GetStructName(otherTable.Name)))
 	for _, col := range otherTable.Columns {
 		if col.IsFilter {
 			buf.WriteString(fmt.Sprintf("\n\t\t\t%s: opt.Filter.%s,",
@@ -1052,4 +1003,217 @@ func generateBRBizSelectList(table *model.Table, otherTableStructName string) st
 		))
 	}
 	return buf.String()
+}
+
+// genBRTableBizMethods 为BR表生成自己的biz层关系查询方法
+func genBRTableBizMethods(code *string, table *model.Table) {
+	// 只为BR表生成关系方法
+	if table.Type != model.TableType_BR {
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表连接的两个DATA表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil || !brRelatedTables.IsValid {
+		// 如果BR表无效，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS, "")
+		return
+	}
+
+	var methodsBuf strings.Builder
+
+	// 生成双向查询方法
+	generateBRTableBizMethod(&methodsBuf, table, brRelatedTables.Table1, brRelatedTables.Table2)
+	generateBRTableBizMethod(&methodsBuf, table, brRelatedTables.Table2, brRelatedTables.Table1)
+
+	// 生成批量操作方法
+	generateBRTableBizBatchMethods(&methodsBuf, table, brRelatedTables)
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS, methodsBuf.String())
+}
+
+// generateBRTableBizMethod 生成单个BR表的biz层关系查询方法
+// sourceTable: 查询的源表（通过其ID查询）
+// targetTable: 查询的目标表（返回的结果）
+func generateBRTableBizMethod(methodsBuf *strings.Builder, brTable, sourceTable, targetTable *model.Table) {
+	sourceTableStructName := helper.GetStructName(sourceTable.Name)
+	targetTableStructName := helper.GetStructName(targetTable.Name)
+	brTableStructName := helper.GetStructName(brTable.Name)
+
+	// 生成方法：Get{TargetTable}ListBy{SourceTable}ID
+	methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Get%sListBy%sID(ctx context.Context, %sId uint64, opt *%sListOption) ([]*%sListBO, int64, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("opt", jgstr.JsonEncode(opt))
+
+	// 转换biz层option为repo层option，调用BR表repo的方法
+	related%ss, total, err := b.%sRepo.Get%sListBy%sID(ctx, %sId, &option.%sListOption{
+		Pagination: opt.Pagination,
+		Order:      opt.Order,%s
+		Select: []interface{}{%s
+		},
+	})
+	if err != nil {
+		log.WithError(err).Error("fail to get related %s list")
+		return nil, 0, cerror.Internal(err.Error())
+	}
+
+	// 转换为ListBO，复用目标表的ToXxxListBO方法
+	result, err := b.To%sListBO(ctx, related%ss)
+	if err != nil {
+		log.WithError(err).Error("fail to convert %s models to %sListBO")
+		return nil, 0, cerror.Internal(err.Error())
+	}
+	return result, total, nil
+}
+`, targetTableStructName, sourceTableStructName, // Get{Target}ListBy{Source}ID
+		helper.GetVarName(sourceTable.Name), targetTableStructName, targetTableStructName, // 参数和返回类型
+		helper.GetVarName(sourceTable.Name), helper.GetVarName(sourceTable.Name), // log字段
+		targetTableStructName, brTableStructName, targetTableStructName, sourceTableStructName, helper.GetVarName(sourceTable.Name), targetTableStructName, // repo调用
+		generateBRBizFilterAssignmentDirect(targetTable),            // filter转换
+		generateBRBizSelectList(targetTable, targetTableStructName), // select字段
+		targetTable.Name,                             // 错误日志
+		targetTableStructName, targetTableStructName, // BO转换
+		targetTable.Name, targetTableStructName)) // BO转换错误日志
+}
+
+// generateBRTableBizBatchMethods 生成BR表的biz层批量操作方法
+func generateBRTableBizBatchMethods(methodsBuf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+	brTableStructName := helper.GetStructName(brTable.Name)
+
+	// 生成Bind{BRTable}Batch方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Bind%sBatch(ctx context.Context, %sIds []uint64, %sIds []uint64) error {
+	log := contexts.GetLogger(ctx).
+		WithField("%sIds", %sIds).
+		WithField("%sIds", %sIds)
+
+	err := b.%sRepo.BindBatch(ctx, %sIds, %sIds)
+	if err != nil {
+		log.WithError(err).Error("fail to bind batch %s relationships")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数名和参数
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段1
+		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段2
+		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // repo调用
+		brTable.Name)) // 错误日志
+
+	// 生成Unbind{BRTable}From{Table1}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("%sIds", %sIds)
+
+	_, err := b.%sRepo.UnbindBatchFrom%s(ctx, %sId, %sIds)
+	if err != nil {
+		log.WithError(err).Error("fail to unbind batch %s relationships from %s")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数签名
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段1
+		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段2
+		brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // repo调用
+		brTable.Name, brRelatedTables.Table1.Name)) // 错误日志
+
+	// 生成Unbind{BRTable}From{Table2}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("%sIds", %sIds)
+
+	_, err := b.%sRepo.UnbindBatchFrom%s(ctx, %sId, %sIds)
+	if err != nil {
+		log.WithError(err).Error("fail to unbind batch %s relationships from %s")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // 函数签名
+		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段1
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段2
+		brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // repo调用
+		brTable.Name, brRelatedTables.Table2.Name)) // 错误日志
+}
+
+// genBRCascadeUnbindInBiz 生成BR表级联解绑逻辑（在主表的delete函数中）
+func genBRCascadeUnbindInBiz(code *string, table *model.Table) {
+	// 只为DATA表生成BR级联解绑逻辑
+	if table.Type != model.TableType_DATA {
+		*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 获取当前表的所有BR表关系
+	brTables := helper.GetMainTableBRs(table, table.Database.Tables)
+
+	if len(brTables) == 0 {
+		// 如果没有BR表，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, "")
+		return
+	}
+
+	var cascadeBuf strings.Builder
+	mainTableStructName := helper.GetStructName(table.Name)
+
+	// 为每个BR表生成级联解绑逻辑
+	for _, brTable := range brTables {
+		// 识别BR表连接的两个数据表
+		brRelated := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
+		if brRelated == nil {
+			continue
+		}
+
+		// 确定当前表在BR关系中的位置
+		var unbindMethodName string
+		if brRelated.Table1.Name == table.Name {
+			// 当前表是Table1，调用UnbindAllFromTable1
+			unbindMethodName = fmt.Sprintf("UnbindAllFrom%s", mainTableStructName)
+		} else if brRelated.Table2.Name == table.Name {
+			// 当前表是Table2，调用UnbindAllFromTable2
+			unbindMethodName = fmt.Sprintf("UnbindAllFrom%s", mainTableStructName)
+		} else {
+			// 当前表不在这个BR关系中，跳过
+			continue
+		}
+
+		brTableStructName := helper.GetStructName(brTable.Name)
+
+		cascadeBuf.WriteString(fmt.Sprintf(`
+		// 级联解绑%s关系
+		_, err = b.%sRepo.%s(txCtx, id)
+		if err != nil {
+			log.WithError(err).Error("fail to unbind all %s relationships")
+			return cerror.Internal(err.Error())
+		}`,
+			brTable.Comment,
+			brTableStructName, unbindMethodName,
+			brTable.Name))
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_CASCADE_UNBIND_IN_BIZ, cascadeBuf.String())
 }

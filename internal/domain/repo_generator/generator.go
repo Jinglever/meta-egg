@@ -90,7 +90,7 @@ func Generate(codeDir string, project *model.Project, dbOper repo.DBOperator) (r
 		}
 
 		if table.Type == model.TableType_DATA || table.Type == model.TableType_META {
-			// internal/repo/option
+			// internal/repo/option (BR tables don't need option files)
 			err = generateGoFileForTable(filepath.Join(codeDir, "internal", "repo", "option", table.Name+".go"),
 				template.TplInternalOptionTable, table, helper.AddHeaderCanEdit, nil)
 			if err != nil {
@@ -107,7 +107,7 @@ func getGenTableTplByTableType(tableType model.TableType) string {
 	case model.TableType_DATA:
 		return template.TplGenRepoDataTable
 	case model.TableType_BR:
-		return template.TplGenRepoDataTable
+		return template.TplGenRepoBRTable
 	case model.TableType_RL:
 		return template.TplGenRepoDataTable
 	case model.TableType_META:
@@ -122,7 +122,7 @@ func getInternalTableTplByTableType(tableType model.TableType) string {
 	case model.TableType_DATA:
 		return template.TplInternalRepoTableData
 	case model.TableType_BR:
-		return template.TplInternalRepoTableMeta
+		return template.TplInternalRepoTableBR
 	case model.TableType_RL:
 		return template.TplInternalRepoTableMeta
 	case model.TableType_META:
@@ -170,17 +170,37 @@ func replaceTplForTable(code *string, table *model.Table, dbOper repo.DBOperator
 	genFilterColList(code, table)
 	genFilterGetRepoOptions(code, table)
 
-	// Generate RL table related code for DATA tables
-	genRLMethods(code, table)
+	if table.Type == model.TableType_BR {
+		if dbOper != nil {
+			// For BR tables in gen layer, generate bind methods and clear relation methods
+			genBRTableBindMethods(code, table)
+			*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_INTERFACE, "")
+			*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_IMPLEMENTATION, "")
+		} else {
+			// For BR tables in internal layer, generate relation methods and clear bind methods
+			genBRTableRelationMethods(code, table)
+			*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_INTERFACE, "")
+			*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_IMPLEMENTATION, "")
+		}
+		// Generate BR table option structures
+		genBROptions(code, table)
+	} else {
+		// Generate RL table related code for DATA tables
+		genRLMethods(code, table)
 
-	// Generate BR table related code for DATA tables
-	genBRMethods(code, table)
+		// Generate BR table related code for DATA tables (now empty)
+		genBRMethods(code, table)
 
-	// Generate BR table option structures for DATA tables
-	genBROptions(code, table)
+		// Generate BR table option structures for DATA tables
+		genBROptions(code, table)
 
-	// Generate BR table repo interface and implementation for DATA tables
-	genBRRepoMethods(code, table)
+		// Generate BR table repo interface and implementation for DATA tables (now empty)
+		genBRRepoMethods(code, table)
+
+		// Clear BR bind methods placeholders for non-BR tables
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_IMPLEMENTATION, "")
+	}
 
 	if table.Type == model.TableType_META {
 		metaRecords, err := helper.GetMetaRecords(table, eCols, dbOper)
@@ -410,9 +430,26 @@ func genFilterColList(code *string, table *model.Table) {
 
 func genFilterGetRepoOptions(code *string, table *model.Table) {
 	var buf bytes.Buffer
+	tableStructName := helper.GetStructName(table.Name)
+	tableNameVar := helper.GetVarName(table.Name)
+
+	// 检查是否有filter字段
+	hasFilterFields := false
 	for _, col := range table.Columns {
 		if col.IsFilter {
-			buf.WriteString(fmt.Sprintf("if o.%s != nil {\n", helper.GetTableColName(col.Name)))
+			hasFilterFields = true
+			break
+		}
+	}
+
+	// 只有在有filter字段时才生成表名变量定义
+	if hasFilterFields {
+		buf.WriteString(fmt.Sprintf("%sTableName := (&model.%s{}).TableName()\n", tableNameVar, tableStructName))
+	}
+
+	for _, col := range table.Columns {
+		if col.IsFilter {
+			buf.WriteString(fmt.Sprintf("\tif o.%s != nil {\n", helper.GetTableColName(col.Name)))
 
 			gotype, err := helper.GetGoType(col)
 			if err != nil {
@@ -424,13 +461,15 @@ func genFilterGetRepoOptions(code *string, table *model.Table) {
 				star = "*"
 			}
 
-			buf.WriteString(fmt.Sprintf("\tops = append(ops, gormx.Where(model.Col%s%s+\" = ?\", %so.%s))\n",
-				helper.GetStructName(table.Name),
+			// 使用表名前缀，这样既适用于普通查询也适用于JOIN查询
+			buf.WriteString(fmt.Sprintf("\t\tops = append(ops, gormx.Where(%sTableName+\".\"+model.Col%s%s+\" = ?\", %so.%s))\n",
+				tableNameVar,
+				tableStructName,
 				helper.GetTableColName(col.Name),
 				star,
 				helper.GetTableColName(col.Name),
 			))
-			buf.WriteString("\t\t}\n")
+			buf.WriteString("\t}\n")
 		}
 	}
 	*code = strings.ReplaceAll(*code, template.PH_FILTER_GET_REPO_OPTIONS, buf.String())
@@ -688,8 +727,11 @@ func genBRMethods(code *string, table *model.Table) {
 
 // genBROptions 生成BR表相关的option结构（在option模板中使用）
 func genBROptions(code *string, table *model.Table) {
-	// 只为DATA表生成BR option结构
-	if table.Type != model.TableType_DATA {
+	if table.Type == model.TableType_BR {
+		// BR表不需要生成option文件，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+		return
+	} else if table.Type != model.TableType_DATA {
 		*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
 		return
 	}
@@ -718,32 +760,8 @@ func genBROptions(code *string, table *model.Table) {
 		return
 	}
 
-	var optionsBuf strings.Builder
-	currentTableStructName := helper.GetStructName(table.Name)
-
-	// 为当前表生成一组BR filter选项（供所有指向该表的BR关系使用）
-	optionsBuf.WriteString(fmt.Sprintf(`
-type Related%sFilterOption struct {%s
-}
-
-func (o *Related%sFilterOption) GetRepoOptions() []gormx.Option {
-	ops := make([]gormx.Option, 0)%s
-	return ops
-}
-
-type Related%sListOption struct {
-	Pagination *PaginationOption
-	Order      *OrderOption
-	Filter     *Related%sFilterOption
-	Select     []interface{} // select columns, such as []interface{}{"id", "name"}
-}
-`, currentTableStructName, generateBRFilterFields(table), // FilterOption定义 - 使用当前表的字段
-		currentTableStructName, generateBRFilterRepoOptions(table), // GetRepoOptions方法实现 - 使用当前表的字段
-		currentTableStructName,  // ListOption定义
-		currentTableStructName)) // Filter字段类型
-
-	// 替换占位符
-	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, optionsBuf.String())
+	// 不再生成任何BR相关的option结构，直接使用现有的XxxListOption和XxxFilterOption
+	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
 }
 
 // generateBRFilterFields 生成目标表的filter字段定义（用于BR关系查询）
@@ -806,184 +824,11 @@ func generateBRFilterRepoOptions(table *model.Table) string {
 }
 
 // genBRRepoMethods 生成BR表相关的repo接口和实现方法（在internal repo模板中使用）
+// 现在不再在DATA表repo中生成BR方法，BR方法已移到BR表自己的repo中
 func genBRRepoMethods(code *string, table *model.Table) {
-	// 只为DATA表生成BR repo方法
-	if table.Type != model.TableType_DATA {
-		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, "")
-		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, "")
-		return
-	}
-
-	// 构建表名到表的映射
-	tableNameToTable := make(map[string]*model.Table)
-	for _, t := range table.Database.Tables {
-		tableNameToTable[t.Name] = t
-	}
-
-	// 获取当前主表的所有BR表
-	brTables := helper.GetMainTableBRs(table, table.Database.Tables)
-
-	if len(brTables) == 0 {
-		// 如果没有BR表，清空占位符
-		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, "")
-		*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, "")
-		return
-	}
-
-	var interfaceBuf, implBuf strings.Builder
-
-	// 为每个BR表生成方法
-	for _, brTable := range brTables {
-		// 识别BR表连接的两个DATA表
-		brRelatedTables := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
-		if brRelatedTables == nil {
-			continue // 跳过无效的BR表
-		}
-
-		// 获取对方表
-		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
-		if otherTable == nil {
-			continue
-		}
-
-		// 确定当前表和目标表的外键信息
-		var thisTableFKColumn *model.Column
-		var otherTableFKColumn *model.Column
-
-		if brRelatedTables.Table1.Name == table.Name {
-			// 当前表是Table1，另一边是Table2
-			thisTableFKColumn = brRelatedTables.Table1FK
-			otherTableFKColumn = brRelatedTables.Table2FK
-		} else if brRelatedTables.Table2.Name == table.Name {
-			// 当前表是Table2，另一边是Table1
-			thisTableFKColumn = brRelatedTables.Table2FK
-			otherTableFKColumn = brRelatedTables.Table1FK
-		} else {
-			// 当前表不在这个BR关系中，跳过
-			continue
-		}
-
-		otherTableStructName := helper.GetStructName(otherTable.Name)
-		thisTableStructName := helper.GetStructName(table.Name)
-		brTableStructName := helper.GetStructName(brTable.Name)
-
-		// 生成字段名
-		thisTableFKFieldName := helper.GetTableColName(thisTableFKColumn.Name)
-		otherTableFKFieldName := helper.GetTableColName(otherTableFKColumn.Name)
-		otherTablePKFieldName := helper.GetTableColName(otherTable.PrimaryColumn.Name)
-
-		// 生成表名变量（用于表名前缀）
-		otherTableNameVar := helper.GetVarName(otherTable.Name)
-		brTableNameVar := helper.GetVarName(brTable.Name)
-
-		// 生成接口方法 - 返回 (entities, total, error) 匹配主表GetList模式
-		interfaceBuf.WriteString(fmt.Sprintf(`
-	GetRelated%sList(ctx context.Context, thisId uint64, opt *option.Related%sListOption) ([]*model.%s, int64, error)`,
-			otherTableStructName, otherTableStructName, otherTableStructName))
-
-		// 生成实现方法
-		implBuf.WriteString(fmt.Sprintf(`
-func (r *%sRepoImpl) GetRelated%sList(ctx context.Context, thisId uint64, opt *option.Related%sListOption) ([]*model.%s, int64, error) {
-	log := contexts.GetLogger(ctx).
-		WithField("thisId", thisId).
-		WithField("opt", jgstr.JsonEncode(opt))
-	
-	// 构建gormx选项数组
-	opts := make([]gormx.Option, 0)
-	
-	// 添加JOIN和WHERE条件
-	%sTableName := (&model.%s{}).TableName()
-	%sTableName := (&model.%s{}).TableName()
-	
-	// 添加INNER JOIN
-	joinSQL := "INNER JOIN " + %sTableName + " ON " + %sTableName + "." + model.Col%s%s + " = " + %sTableName + "." + model.Col%s%s
-	opts = append(opts, gormx.Join(joinSQL))
-	
-	// 添加WHERE条件
-	whereSQL := %sTableName + "." + model.Col%s%s + " = ?"
-	opts = append(opts, gormx.Where(whereSQL, thisId))
-	
-	// 处理Filter选项
-	if opt != nil && opt.Filter != nil {
-		filterOpts := opt.Filter.GetRepoOptions()
-		opts = append(opts, filterOpts...)
-	}
-	
-	// 处理Order选项
-	if opt != nil && opt.Order != nil {
-		validOrderby := []string{%s
-		}
-		orderOpts := opt.Order.GetRepoOptions(validOrderby)
-		opts = append(opts, orderOpts...)
-	}
-	
-	// 先计算总数（不包含分页和Select）
-	var total int64
-	tx := r.GetTX(ctx).Model(&model.%s{})
-	for _, option := range opts {
-		tx = option(tx)
-	}
-	result := tx.Count(&total)
-	if result.Error != nil {
-		log.WithError(result.Error).Error("fail to count related %s list")
-		return nil, 0, result.Error
-	}
-	if total == 0 {
-		return make([]*model.%s, 0), 0, nil
-	}
-	
-	// 处理Pagination选项
-	if opt != nil && opt.Pagination != nil {
-		paginationOpts := opt.Pagination.GetRepoOptions()
-		opts = append(opts, paginationOpts...)
-	}
-	
-	// 处理Select选项（补全表名前缀）
-	if opt != nil && len(opt.Select) > 0 {
-		selectFields := make([]interface{}, len(opt.Select))
-		for i, field := range opt.Select {
-			if fieldStr, ok := field.(string); ok {
-				// 补全表名前缀
-				selectFields[i] = %sTableName + "." + fieldStr
-			} else {
-				selectFields[i] = field
-			}
-		}
-		opts = append(opts, gormx.Select(selectFields...))
-	}
-	
-	// 执行查询，获取对方表数据
-	var results []*model.%s
-	tx = r.GetTX(ctx)
-	for _, option := range opts {
-		tx = option(tx)
-	}
-	if err := tx.Find(&results).Error; err != nil {
-		log.WithError(err).Error("fail to get related %s list")
-		return nil, 0, err
-	}
-	
-	return results, total, nil
-}
-`, thisTableStructName, otherTableStructName, otherTableStructName, otherTableStructName, // 函数签名
-			otherTableNameVar, otherTableStructName, // 对方表名变量定义
-			brTableNameVar, brTableStructName, // BR表名变量定义
-			brTableNameVar, brTableNameVar, // JOIN条件：BR表与BR表
-			brTableStructName, otherTableFKFieldName, // BR表中指向对方表的外键
-			otherTableNameVar, otherTableStructName, otherTablePKFieldName, // 对方表主键
-			brTableNameVar, brTableStructName, thisTableFKFieldName, // WHERE条件：BR表中当前表外键
-			generateBROrderByListWithTablePrefix(otherTable, otherTableNameVar), // orderBy列表
-			otherTableStructName, // count Model：对方表
-			otherTable.Name,      // count错误日志
-			otherTableStructName, // 空结果类型
-			otherTableNameVar,    // Select字段表名前缀
-			otherTableStructName, // results类型
-			otherTable.Name))     // 查询错误日志
-	}
-
-	// 替换占位符
-	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, interfaceBuf.String())
-	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, implBuf.String())
+	// 清空所有BR相关占位符，因为BR方法现在在BR表自己的repo中
+	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_INTERFACE, "")
+	*code = strings.ReplaceAll(*code, template.PH_BR_REPO_IMPLEMENTATION, "")
 }
 
 // generateBROrderByList 生成目标表的orderBy列表（用于BR关系查询的验证）
@@ -1016,4 +861,392 @@ func generateBROrderByListWithTablePrefix(table *model.Table, tableNameVar strin
 		))
 	}
 	return buf.String()
+}
+
+// genBRTableRelationMethods 为BR表生成双向关系查询方法
+func genBRTableRelationMethods(code *string, table *model.Table) {
+	// 只为BR表生成关系方法
+	if table.Type != model.TableType_BR {
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_IMPLEMENTATION, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表连接的两个DATA表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil || !brRelatedTables.IsValid {
+		// 如果BR表无效，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_IMPLEMENTATION, "")
+		return
+	}
+
+	var interfaceBuf, implBuf strings.Builder
+
+	// 生成双向查询方法
+	generateBRRelationMethod(&interfaceBuf, &implBuf, table, brRelatedTables.Table1, brRelatedTables.Table2, brRelatedTables.Table1FK, brRelatedTables.Table2FK)
+	generateBRRelationMethod(&interfaceBuf, &implBuf, table, brRelatedTables.Table2, brRelatedTables.Table1, brRelatedTables.Table2FK, brRelatedTables.Table1FK)
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_INTERFACE, interfaceBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_METHODS_IMPLEMENTATION, implBuf.String())
+}
+
+// generateBRRelationMethod 生成单个BR关系查询方法
+// sourceTable: 查询的源表（通过其ID查询）
+// targetTable: 查询的目标表（返回的结果）
+// sourceFKColumn: BR表中指向源表的外键列
+// targetFKColumn: BR表中指向目标表的外键列
+func generateBRRelationMethod(interfaceBuf, implBuf *strings.Builder, brTable, sourceTable, targetTable *model.Table, sourceFKColumn, targetFKColumn *model.Column) {
+	sourceTableStructName := helper.GetStructName(sourceTable.Name)
+	targetTableStructName := helper.GetStructName(targetTable.Name)
+	brTableStructName := helper.GetStructName(brTable.Name)
+
+	// 生成字段名
+	sourceFKFieldName := helper.GetTableColName(sourceFKColumn.Name)
+	targetFKFieldName := helper.GetTableColName(targetFKColumn.Name)
+	targetPKFieldName := helper.GetTableColName(targetTable.PrimaryColumn.Name)
+
+	// 生成表名变量（用于表名前缀）
+	targetTableNameVar := helper.GetVarName(targetTable.Name)
+	brTableNameVar := helper.GetVarName(brTable.Name)
+
+	// 生成接口方法 - 命名格式：Get{TargetTable}ListBy{SourceTable}ID
+	interfaceBuf.WriteString(fmt.Sprintf(`
+	Get%sListBy%sID(ctx context.Context, %sId uint64, opt *option.%sListOption) ([]*model.%s, int64, error)`,
+		targetTableStructName, sourceTableStructName, helper.GetVarName(sourceTable.Name), targetTableStructName, targetTableStructName))
+
+	// 生成实现方法
+	implBuf.WriteString(fmt.Sprintf(`
+func (r *%sRepoImpl) Get%sListBy%sID(ctx context.Context, %sId uint64, opt *option.%sListOption) ([]*model.%s, int64, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("opt", jgstr.JsonEncode(opt))
+
+	// 构建gormx选项数组
+	opts := make([]gormx.Option, 0)
+
+	// 添加JOIN和WHERE条件
+	%sTableName := (&model.%s{}).TableName()
+	%sTableName := (&model.%s{}).TableName()
+
+	// 添加INNER JOIN
+	joinSQL := "INNER JOIN " + %sTableName + " ON " + %sTableName + "." + model.Col%s%s + " = " + %sTableName + "." + model.Col%s%s
+	opts = append(opts, gormx.Join(joinSQL))
+
+	// 添加WHERE条件
+	whereSQL := %sTableName + "." + model.Col%s%s + " = ?"
+	opts = append(opts, gormx.Where(whereSQL, %sId))
+
+	// 处理Filter选项
+	if opt != nil && opt.Filter != nil {
+		filterOpts := opt.Filter.GetRepoOptions()
+		opts = append(opts, filterOpts...)
+	}
+
+	// 处理Order选项
+	if opt != nil && opt.Order != nil {
+		validOrderby := []string{%s
+		}
+		orderOpts := opt.Order.GetRepoOptions(validOrderby)
+		opts = append(opts, orderOpts...)
+	}
+
+	// 先计算总数（不包含分页和Select）
+	var total int64
+	tx := r.GetTX(ctx).Model(&model.%s{})
+	for _, option := range opts {
+		tx = option(tx)
+	}
+	result := tx.Count(&total)
+	if result.Error != nil {
+		log.WithError(result.Error).Error("fail to count related %s list")
+		return nil, 0, result.Error
+	}
+	if total == 0 {
+		return make([]*model.%s, 0), 0, nil
+	}
+
+	// 处理Pagination选项
+	if opt != nil && opt.Pagination != nil {
+		paginationOpts := opt.Pagination.GetRepoOptions()
+		opts = append(opts, paginationOpts...)
+	}
+
+	// 处理Select选项（补全表名前缀）
+	if opt != nil && len(opt.Select) > 0 {
+		selectFields := make([]interface{}, len(opt.Select))
+		for i, field := range opt.Select {
+			if fieldStr, ok := field.(string); ok {
+				// 补全表名前缀
+				selectFields[i] = %sTableName + "." + fieldStr
+			} else {
+				selectFields[i] = field
+			}
+		}
+		opts = append(opts, gormx.Select(selectFields...))
+	}
+
+	// 执行查询，获取目标表数据
+	var results []*model.%s
+	tx = r.GetTX(ctx)
+	for _, option := range opts {
+		tx = option(tx)
+	}
+	if err := tx.Find(&results).Error; err != nil {
+		log.WithError(err).Error("fail to get related %s list")
+		return nil, 0, err
+	}
+
+	return results, total, nil
+}
+`, brTableStructName, targetTableStructName, sourceTableStructName, helper.GetVarName(sourceTable.Name), targetTableStructName, targetTableStructName, // 函数签名
+		helper.GetVarName(sourceTable.Name), helper.GetVarName(sourceTable.Name), // 日志字段
+		targetTableNameVar, targetTableStructName, // 目标表名变量定义
+		brTableNameVar, brTableStructName, // BR表名变量定义
+		brTableNameVar, brTableNameVar, // JOIN条件：BR表与BR表
+		brTableStructName, targetFKFieldName, // BR表中指向目标表的外键
+		targetTableNameVar, targetTableStructName, targetPKFieldName, // 目标表主键
+		brTableNameVar, brTableStructName, sourceFKFieldName, // WHERE条件：BR表中源表外键
+		helper.GetVarName(sourceTable.Name),                                   // WHERE条件参数
+		generateBROrderByListWithTablePrefix(targetTable, targetTableNameVar), // orderBy列表
+		targetTableStructName,                                                 // count Model：目标表
+		targetTable.Name,                                                      // count错误日志
+		targetTableStructName,                                                 // 空结果类型
+		targetTableNameVar,                                                    // Select字段表名前缀
+		targetTableStructName,                                                 // results类型
+		targetTable.Name))                                                     // 查询错误日志
+}
+
+// genBRTableOptions 为BR表生成RelatedXxxListOption结构
+func genBRTableOptions(code *string, table *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表连接的两个DATA表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil || !brRelatedTables.IsValid {
+		// 如果BR表无效，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, "")
+		return
+	}
+
+	var optionsBuf strings.Builder
+
+	// 为两个关联表分别生成RelatedXxxListOption
+	generateRelatedListOption(&optionsBuf, brRelatedTables.Table1)
+	generateRelatedListOption(&optionsBuf, brRelatedTables.Table2)
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_OPTIONS, optionsBuf.String())
+}
+
+// generateRelatedListOption 为指定表生成RelatedXxxListOption结构
+func generateRelatedListOption(buf *strings.Builder, table *model.Table) {
+	tableStructName := helper.GetStructName(table.Name)
+
+	buf.WriteString(fmt.Sprintf(`
+type Related%sFilterOption struct {%s
+}
+
+func (o *Related%sFilterOption) GetRepoOptions() []gormx.Option {
+	ops := make([]gormx.Option, 0)%s
+	return ops
+}
+
+type Related%sListOption struct {
+	Pagination *PaginationOption
+	Order      *OrderOption
+	Filter     *Related%sFilterOption
+	Select     []interface{} // select columns, such as []interface{}{"id", "name"}
+}
+`, tableStructName, generateBRFilterFields(table), // FilterOption定义 - 使用目标表的字段
+		tableStructName, generateBRFilterRepoOptions(table), // GetRepoOptions方法实现 - 使用目标表的字段
+		tableStructName,  // ListOption定义
+		tableStructName)) // Filter字段类型
+}
+
+// genBRTableBindMethods 为BR表生成bind/unbind方法（在gen层）
+func genBRTableBindMethods(code *string, table *model.Table) {
+	// 只为BR表生成bind方法
+	if table.Type != model.TableType_BR {
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_IMPLEMENTATION, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表连接的两个DATA表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil || !brRelatedTables.IsValid {
+		// 如果BR表无效，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_INTERFACE, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_IMPLEMENTATION, "")
+		return
+	}
+
+	var interfaceBuf, implBuf strings.Builder
+
+	// 生成bind/unbind方法
+	generateBRBindMethods(&interfaceBuf, &implBuf, table, brRelatedTables)
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_INTERFACE, interfaceBuf.String())
+	*code = strings.ReplaceAll(*code, template.PH_BR_BIND_METHODS_IMPLEMENTATION, implBuf.String())
+}
+
+// generateBRBindMethods 生成BR表的bind/unbind方法
+func generateBRBindMethods(interfaceBuf, implBuf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+	brTableStructName := helper.GetStructName(brTable.Name)
+
+	// 生成字段名
+	table1FKFieldName := helper.GetTableColName(brRelatedTables.Table1FK.Name)
+	table2FKFieldName := helper.GetTableColName(brRelatedTables.Table2FK.Name)
+
+	// 生成接口方法
+	interfaceBuf.WriteString(fmt.Sprintf(`
+	// Bind creates a relationship between %s and %s
+	Bind(ctx context.Context, %sId uint64, %sId uint64) error
+	// BindBatch creates multiple relationships between %s and %s
+	BindBatch(ctx context.Context, %sIds []uint64, %sIds []uint64) error
+	// Unbind removes a specific relationship between %s and %s
+	Unbind(ctx context.Context, %sId uint64, %sId uint64) (rowsAffected int64, err error)
+	// UnbindBatchFrom%s removes multiple relationships from a specific %s
+	UnbindBatchFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) (rowsAffected int64, err error)
+	// UnbindBatchFrom%s removes multiple relationships from a specific %s
+	UnbindBatchFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) (rowsAffected int64, err error)
+	// UnbindAllFrom%s removes all relationships from a specific %s
+	UnbindAllFrom%s(ctx context.Context, %sId uint64) (rowsAffected int64, err error)
+	// UnbindAllFrom%s removes all relationships from a specific %s
+	UnbindAllFrom%s(ctx context.Context, %sId uint64) (rowsAffected int64, err error)`,
+		brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // Bind注释
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // Bind参数
+		brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // BindBatch注释
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // BindBatch参数
+		brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // Unbind注释
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // Unbind参数
+		table1StructName, brRelatedTables.Table1.Name, // UnbindBatchFromTable1注释
+		table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // UnbindBatchFromTable1参数
+		table2StructName, brRelatedTables.Table2.Name, // UnbindBatchFromTable2注释
+		table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // UnbindBatchFromTable2参数
+		table1StructName, brRelatedTables.Table1.Name, // UnbindAllFromTable1注释
+		table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), // UnbindAllFromTable1参数
+		table2StructName, brRelatedTables.Table2.Name, // UnbindAllFromTable2注释
+		table2StructName, helper.GetVarName(brRelatedTables.Table2.Name))) // UnbindAllFromTable2参数
+
+	// 生成实现方法
+	implBuf.WriteString(fmt.Sprintf(`
+// Bind creates a relationship between %s and %s
+func (s *%sRepoImpl) Bind(ctx context.Context, %sId uint64, %sId uint64) error {
+	m := &model.%s{
+		%s: %sId,
+		%s: %sId,
+	}
+	return s.Create(ctx, m)
+}
+
+// BindBatch creates multiple relationships between %s and %s
+func (s *%sRepoImpl) BindBatch(ctx context.Context, %sIds []uint64, %sIds []uint64) error {
+	if len(%sIds) == 0 || len(%sIds) == 0 {
+		return nil
+	}
+
+	var ms []*model.%s
+	for _, %sId := range %sIds {
+		for _, %sId := range %sIds {
+			ms = append(ms, &model.%s{
+				%s: %sId,
+				%s: %sId,
+			})
+		}
+	}
+	return s.CreateBatch(ctx, ms)
+}
+
+// Unbind removes a specific relationship between %s and %s
+func (s *%sRepoImpl) Unbind(ctx context.Context, %sId uint64, %sId uint64) (rowsAffected int64, err error) {
+	return s.Delete(ctx,
+		gormx.Where(model.Col%s%s+" = ?", %sId),
+		gormx.Where(model.Col%s%s+" = ?", %sId))
+}
+
+// UnbindBatchFrom%s removes multiple relationships from a specific %s
+func (s *%sRepoImpl) UnbindBatchFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) (rowsAffected int64, err error) {
+	if len(%sIds) == 0 {
+		return 0, nil
+	}
+	return s.Delete(ctx,
+		gormx.Where(model.Col%s%s+" = ?", %sId),
+		gormx.Where(model.Col%s%s+" in (?)", %sIds))
+}
+
+// UnbindBatchFrom%s removes multiple relationships from a specific %s
+func (s *%sRepoImpl) UnbindBatchFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) (rowsAffected int64, err error) {
+	if len(%sIds) == 0 {
+		return 0, nil
+	}
+	return s.Delete(ctx,
+		gormx.Where(model.Col%s%s+" = ?", %sId),
+		gormx.Where(model.Col%s%s+" in (?)", %sIds))
+}
+
+// UnbindAllFrom%s removes all relationships from a specific %s
+func (s *%sRepoImpl) UnbindAllFrom%s(ctx context.Context, %sId uint64) (rowsAffected int64, err error) {
+	return s.Delete(ctx, gormx.Where(model.Col%s%s+" = ?", %sId))
+}
+
+// UnbindAllFrom%s removes all relationships from a specific %s
+func (s *%sRepoImpl) UnbindAllFrom%s(ctx context.Context, %sId uint64) (rowsAffected int64, err error) {
+	return s.Delete(ctx, gormx.Where(model.Col%s%s+" = ?", %sId))
+}
+`, brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // Bind注释
+		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // Bind函数签名
+		brTableStructName,                                                 // 创建的model类型
+		table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // 设置table1外键
+		table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name), // 设置table2外键
+		brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // BindBatch注释
+		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // BindBatch函数签名
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // BindBatch长度检查
+		brTableStructName, // BindBatch model类型
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // BindBatch外层循环
+		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // BindBatch内层循环
+		brTableStructName,                                                 // BindBatch创建model类型
+		table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // BindBatch设置table1外键
+		table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name), // BindBatch设置table2外键
+		brRelatedTables.Table1.Name, brRelatedTables.Table2.Name, // Unbind注释
+		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // Unbind函数签名
+		brTableStructName, table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // Unbind WHERE条件1
+		brTableStructName, table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name), // Unbind WHERE条件2
+		table1StructName, brRelatedTables.Table1.Name, // UnbindBatchFromTable1注释
+		brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // UnbindBatchFromTable1函数签名
+		helper.GetVarName(brRelatedTables.Table2.Name), // UnbindBatchFromTable1长度检查
+		brTableStructName, table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // UnbindBatchFromTable1 WHERE条件1
+		brTableStructName, table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name), // UnbindBatchFromTable1 WHERE条件2
+		table2StructName, brRelatedTables.Table2.Name, // UnbindBatchFromTable2注释
+		brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // UnbindBatchFromTable2函数签名
+		helper.GetVarName(brRelatedTables.Table1.Name), // UnbindBatchFromTable2长度检查
+		brTableStructName, table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name), // UnbindBatchFromTable2 WHERE条件1
+		brTableStructName, table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // UnbindBatchFromTable2 WHERE条件2
+		table1StructName, brRelatedTables.Table1.Name, // UnbindAllFromTable1注释
+		brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), // UnbindAllFromTable1函数签名
+		brTableStructName, table1FKFieldName, helper.GetVarName(brRelatedTables.Table1.Name), // UnbindAllFromTable1 WHERE条件
+		table2StructName, brRelatedTables.Table2.Name, // UnbindAllFromTable2注释
+		brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), // UnbindAllFromTable2函数签名
+		brTableStructName, table2FKFieldName, helper.GetVarName(brRelatedTables.Table2.Name))) // UnbindAllFromTable2 WHERE条件
 }
