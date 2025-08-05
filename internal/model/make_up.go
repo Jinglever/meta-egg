@@ -141,8 +141,10 @@ func (t *Table) MakeUp(d *Database) {
 		}
 	}
 
-	// 对于RL表，强制设置HasHandler为false，即使XML中配置了handler="true"
-	if t.Type == TableType_RL {
+	// 对于RL表和META表，强制设置HasHandler为false，即使XML中配置了handler="true"
+	// RL表：通过主表的handler管理，不需要独立的handler
+	// META表：静态元数据，不需要复杂的API接口
+	if t.Type == TableType_RL || t.Type == TableType_META {
 		t.HasHandler = false
 	}
 }

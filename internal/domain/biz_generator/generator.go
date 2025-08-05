@@ -66,8 +66,18 @@ func Generate(codeDir string, project *model.Project) (relativeDir2NeedConfirm m
 
 	if project.Database != nil {
 		for _, table := range project.Database.Tables {
+			// RL表不需要独立的biz层文件，它们通过父表的biz方法管理
+			if table.Type == model.TableType_RL {
+				continue
+			}
+
+			// META表通常是静态元数据，不需要复杂的业务逻辑，不生成独立biz文件
+			if table.Type == model.TableType_META {
+				continue
+			}
+
 			// biz层是业务逻辑层，不应该依赖于是否有handler
-			// BR表和其他表都可能需要biz层逻辑，即使不直接暴露API
+			// BR表和DATA表可能需要biz层逻辑，即使不直接暴露API
 
 			var tpl string
 			if table.Type == model.TableType_BR {
