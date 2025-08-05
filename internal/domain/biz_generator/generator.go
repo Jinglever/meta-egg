@@ -66,9 +66,8 @@ func Generate(codeDir string, project *model.Project) (relativeDir2NeedConfirm m
 
 	if project.Database != nil {
 		for _, table := range project.Database.Tables {
-			if !table.HasHandler { // 由于biz里的代码都是面向handler的, 所以handler不开启的情况下, biz也不要生成
-				continue
-			}
+			// biz层是业务逻辑层，不应该依赖于是否有handler
+			// BR表和其他表都可能需要biz层逻辑，即使不直接暴露API
 
 			var tpl string
 			if table.Type == model.TableType_BR {
