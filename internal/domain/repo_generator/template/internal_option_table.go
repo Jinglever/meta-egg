@@ -24,4 +24,6 @@ type %%TABLE-NAME-STRUCT%%ListOption struct {
 	Filter     *%%TABLE-NAME-STRUCT%%FilterOption
 	Select     []interface{} // select columns, such as []interface{}{"id", "name"}
 }
+
+%%BR-OPTIONS%%
 `

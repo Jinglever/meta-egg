@@ -106,26 +106,44 @@ func Generate(codeDir string, project *model.Project) (relativeDir2NeedConfirm m
 				continue
 			}
 			if hasGRPC {
+				var tpl string
 				if table.Type == model.TableType_DATA || table.Type == model.TableType_META {
-					// internal/handler/grpc/<table>.go
-					path = filepath.Join(codeDir, "internal", "handler", "grpc", helper.GetDirName(table.Name)+".go")
-					err = generateGoFileForTable(path, template.TplGRPCTable, table, helper.AddHeaderCanEdit)
-					if err != nil {
-						log.Errorf("generate internal/handler/grpc/%s.go failed: %v", helper.GetDirName(table.Name), err)
-						return
-					}
+					// DATA和META表使用通用模板
+					tpl = template.TplGRPCTable
+				} else if table.Type == model.TableType_BR {
+					// BR表使用专用模板
+					tpl = template.TplGRPCBRTable
+				} else {
+					// 其他表类型跳过
+					continue
+				}
+
+				// internal/handler/grpc/<table>.go
+				path = filepath.Join(codeDir, "internal", "handler", "grpc", helper.GetDirName(table.Name)+".go")
+				err = generateGoFileForTable(path, tpl, table, helper.AddHeaderCanEdit)
+				if err != nil {
+					log.Errorf("generate internal/handler/grpc/%s.go failed: %v", helper.GetDirName(table.Name), err)
+					return
 				}
 			}
 
 			if hasHTTP {
+				var tpl string
 				if table.Type == model.TableType_DATA || table.Type == model.TableType_META {
-					// internal/handler/http/<table>.go
-					path = filepath.Join(codeDir, "internal", "handler", "http", helper.GetDirName(table.Name)+".go")
-					err = generateGoFileForTable(path, template.TplHTTPDataTable, table, helper.AddHeaderCanEdit)
-					if err != nil {
-						log.Errorf("generate internal/handler/http/%s.go failed: %v", helper.GetDirName(table.Name), err)
-						return
-					}
+					tpl = template.TplHTTPDataTable
+				} else if table.Type == model.TableType_BR {
+					tpl = template.TplHTTPBRTable
+				} else {
+					// 其他表类型跳过
+					continue
+				}
+
+				// internal/handler/http/<table>.go
+				path = filepath.Join(codeDir, "internal", "handler", "http", helper.GetDirName(table.Name)+".go")
+				err = generateGoFileForTableHTTP(path, tpl, table, helper.AddHeaderCanEdit)
+				if err != nil {
+					log.Errorf("generate internal/handler/http/%s.go failed: %v", helper.GetDirName(table.Name), err)
+					return
 				}
 			}
 		}
@@ -158,6 +176,45 @@ func generateGoFileForTable(path string, tpl string, table *model.Table, addHead
 	return nil
 }
 
+func generateGoFileForTableHTTP(path string, tpl string, table *model.Table, addHeader func(s string) string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		log.Errorf("create file %s failed: %v", path, err)
+		return err
+	}
+	defer f.Close()
+
+	// template
+	code := tpl
+	if addHeader != nil {
+		code = addHeader(code)
+	}
+	replaceTplForTableHTTP(&code, table)
+
+	// go format
+	formatted, err := jgstr.FormatGo([]byte(code))
+	if err != nil {
+		log.Errorf("format source failed: %v\n%s", err, code)
+		return err
+	}
+	_, _ = f.Write(formatted)
+	return nil
+}
+
+func replaceTplForTableHTTP(code *string, table *model.Table) {
+	if table.Type == model.TableType_BR {
+		// Generate BR table's own handler methods for HTTP
+		genBRTableHandlerMethods(code, table, true) // true for HTTP
+	} else {
+		// 对于非BR表，调用通用的替换函数处理所有通用占位符
+		replaceTplForTable(code, table)
+	}
+
+	// 通用替换
+	*code = strings.ReplaceAll(*code, template.PH_GO_MODULE, table.Database.Project.GoModule)
+	*code = strings.ReplaceAll(*code, template.PH_PROJECT_NAME_DIR, helper.GetDirName(table.Database.Project.Name))
+}
+
 func replaceTplForTable(code *string, table *model.Table) {
 	if table.Type == model.TableType_DATA {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, template.TplGRPCHandlerCreate)
@@ -173,6 +230,12 @@ func replaceTplForTable(code *string, table *model.Table) {
 		// 生成RL表相关内容
 		genRLDetailStructsAndFields(code, table)
 		genRLGRPCHandlerFunctions(code, table)
+		// 生成BR表相关内容（现在不再在主表中生成BR方法，因为BR表有自己的handler文件）
+		genBRHTTPHandlerFunctions(code, table)
+		genBRGRPCHandlerFunctions(code, table)
+	} else if table.Type == model.TableType_BR {
+		// Generate BR table's own handler methods for gRPC
+		genBRTableHandlerMethods(code, table, false) // false for gRPC
 	} else if table.Type == model.TableType_META {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, template.TplGRPCHandlerGetList)
@@ -204,6 +267,9 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
+		// META表不需要BR表支持
+		*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
 	} else {
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_CREATE, "")
 		*code = strings.ReplaceAll(*code, template.PH_TPL_GRPC_HANDLER_GET_LIST, "")
@@ -235,6 +301,9 @@ func replaceTplForTable(code *string, table *model.Table) {
 		*code = strings.ReplaceAll(*code, template.PH_RL_CONVERT_IN_TO_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_FIELDS_ASSIGN_IN_LISTINFO_GRPC, "")
 		*code = strings.ReplaceAll(*code, template.PH_RL_GRPC_HANDLER_FUNCTIONS, "")
+		// 其他表类型不需要BR表支持
+		*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+		*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
 	}
 
 	genAssignBOToVOGRPC(code, table)
@@ -2473,5 +2542,863 @@ func generateRLStructDefinition(rlTable *model.Table, structType string, onlyLis
 	}
 
 	buf.WriteString("}\n\n")
+	return buf.String()
+}
+
+// genBRHTTPHandlerFunctions 为DATA表生成BR关系的HTTP handler函数
+// 现在不再在主表中生成BR方法，因为BR表有自己的handler文件
+func genBRHTTPHandlerFunctions(code *string, mainTable *model.Table) {
+	// 清空BR HTTP handler函数占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_HTTP_HANDLER_FUNCTIONS, "")
+}
+
+// generateBRFilterDoc 生成BR关系中对方表的筛选字段文档
+func generateBRFilterDoc(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+
+		gotype := helper.GetGoTypeForHandler(col)
+		gotype = strings.TrimPrefix(gotype, "*")
+		buf.WriteString(fmt.Sprintf("\n// @Param		%s			query		%s	false	\"%s\"",
+			col.Name,
+			gotype,
+			helper.GetCommentForHandler(col),
+		))
+	}
+	return buf.String()
+}
+
+// generateBRFilterAssign 生成BR关系中筛选条件的赋值代码
+func generateBRFilterAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString(fmt.Sprintf("\n\t\tFilter: &biz.%sFilterOption{", helper.GetStructName(table.Name)))
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,",
+			helper.GetTableColName(col.Name),
+			helper.GetStructName(col.Name),
+		))
+	}
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBROrderDoc 生成BR关系中对方表的排序字段文档
+func generateBROrderDoc(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	orderCols := make([]string, 0)
+	for _, col := range table.Columns {
+		if !col.IsOrder || col.IsHidden {
+			continue
+		}
+		orderCols = append(orderCols, col.Name)
+	}
+	buf.WriteString(fmt.Sprintf("\n// @Param		order_by		query		string	false	\"排序字段,可选:%s\"",
+		strings.Join(orderCols, "|"),
+	))
+	buf.WriteString("\n// @Param		order_type		query		string	false	\"排序类型,默认desc\"")
+	return buf.String()
+}
+
+// generateBRFilterPrepare 生成BR关系中筛选条件的准备赋值代码
+func generateBRFilterPrepare(table *model.Table) string {
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	// 这里可以添加准备逻辑，目前保持简单
+	return ""
+}
+
+// generateBROrderAssign 生成BR关系中排序条件的赋值代码
+func generateBROrderAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tOrder: &option.OrderOption{")
+	buf.WriteString("\n\t\t\tOrderBy:   req.OrderBy,")
+	buf.WriteString("\n\t\t\tOrderType: req.OrderType,")
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// genBRGRPCHandlerFunctions 为DATA表生成BR关系的gRPC handler函数
+// 现在不再在主表中生成BR方法，因为BR表有自己的handler文件
+func genBRGRPCHandlerFunctions(code *string, mainTable *model.Table) {
+	// 清空BR gRPC handler函数占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_GRPC_HANDLER_FUNCTIONS, "")
+}
+
+// generateBRFilterAssignGRPC 生成BR关系中gRPC筛选条件的赋值代码
+func generateBRFilterAssignGRPC(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tFilter: &biz.")
+	buf.WriteString(helper.GetStructName(table.Name))
+	buf.WriteString("FilterOption{")
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,",
+			helper.GetTableColName(col.Name),
+			helper.GetStructName(col.Name),
+		))
+	}
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBROrderAssignGRPC 生成BR关系中gRPC排序条件的赋值代码
+func generateBROrderAssignGRPC(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tOrder: &option.OrderOption{")
+	buf.WriteString("\n\t\t\tOrderBy:   req.OrderBy,")
+	buf.WriteString("\n\t\t\tOrderType: req.OrderType,")
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// genBRTableHandlerMethods 为BR表生成自己的handler方法
+func genBRTableHandlerMethods(code *string, table *model.Table, isHTTP bool) {
+	// 只为BR表生成handler方法
+	if table.Type != model.TableType_BR {
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_HANDLER_METHODS, "")
+		return
+	}
+
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range table.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表连接的两个DATA表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil || !brRelatedTables.IsValid {
+		// 如果BR表无效，清空占位符
+		*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_HANDLER_METHODS, "")
+		return
+	}
+
+	var methodsBuf strings.Builder
+
+	// 根据模板类型生成不同的方法
+	if isHTTP {
+		// HTTP handler - 将请求结构体和handler方法一起生成
+		generateBRTableHTTPHandlerMethod(&methodsBuf, table, brRelatedTables.Table1, brRelatedTables.Table2)
+		generateBRTableHTTPHandlerMethod(&methodsBuf, table, brRelatedTables.Table2, brRelatedTables.Table1)
+		generateBRTableHTTPHandlerBatchMethods(&methodsBuf, table, brRelatedTables)
+	} else {
+		// gRPC handler
+		generateBRTableHandlerMethod(&methodsBuf, table, brRelatedTables.Table1, brRelatedTables.Table2)
+		generateBRTableHandlerMethod(&methodsBuf, table, brRelatedTables.Table2, brRelatedTables.Table1)
+		generateBRTableHandlerBatchMethods(&methodsBuf, table, brRelatedTables)
+	}
+
+	// 替换占位符
+	*code = strings.ReplaceAll(*code, template.PH_BR_RELATION_HANDLER_METHODS, methodsBuf.String())
+}
+
+// generateBRTableHandlerMethod 生成单个BR表的handler查询方法
+// sourceTable: 查询的源表（通过其ID查询）
+// targetTable: 查询的目标表（返回的结果）
+func generateBRTableHandlerMethod(methodsBuf *strings.Builder, brTable, sourceTable, targetTable *model.Table) {
+	sourceTableStructName := helper.GetStructName(sourceTable.Name)
+	targetTableStructName := helper.GetStructName(targetTable.Name)
+
+	// 生成方法：Get{TargetTable}ListBy{SourceTable}ID
+	methodsBuf.WriteString(fmt.Sprintf(`
+// 获取与指定%s关联的%s列表
+func (h *Handler) Get%sListBy%sID(ctx context.Context, req *api.Get%sListBy%sIDRequest) (*api.Get%sListResponse, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	opt := &biz.%sListOption{
+		Order: &option.OrderOption{
+			OrderBy:   req.OrderBy,
+			OrderType: req.OrderType,
+		},
+		Filter: &biz.%sFilterOption{%s
+		},
+	}
+	if req.Pagination != nil {
+		opt.Pagination = &option.PaginationOption{
+			Page:     int(req.Pagination.Page),
+			PageSize: int(req.Pagination.PageSize),
+		}
+	}
+	%sBOs, total, err := h.BizService.Get%sListBy%sID(ctx, req.%sId, opt)
+	if err != nil {
+		log.WithError(err).Error("BizService.Get%sListBy%sID failed")
+		return nil, err
+	}
+	list, err := h.To%sListInfo(ctx, %sBOs)
+	if err != nil {
+		log.WithError(err).Error("convert %sListBO to %sListInfo failed")
+		return nil, err
+	}
+	return &api.Get%sListResponse{
+		List:  list,
+		Total: total,
+	}, nil
+}
+`, sourceTable.Comment, targetTable.Comment, // 注释
+		targetTableStructName, sourceTableStructName, targetTableStructName, sourceTableStructName, targetTableStructName, // 函数名
+		targetTableStructName,                                                 // opt类型
+		targetTableStructName, generateBRHandlerFilterAssignment(targetTable), // filter选项
+		helper.GetVarName(targetTable.Name), targetTableStructName, sourceTableStructName, sourceTableStructName, // biz调用
+		targetTableStructName, sourceTableStructName, // 错误日志
+		targetTableStructName, helper.GetVarName(targetTable.Name), // ToXxxListInfo调用
+		targetTableStructName, targetTableStructName, // 错误日志
+		targetTableStructName)) // 响应类型
+}
+
+// generateBRTableHandlerBatchMethods 生成BR表的handler批量操作方法
+func generateBRTableHandlerBatchMethods(methodsBuf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+
+	// 生成Bind{Table2}sTo{Table1}方法
+	table1PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table1.Name))
+	table2PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table2.Name))
+
+	methodsBuf.WriteString(fmt.Sprintf(`
+// 给指定%s批量分配%s
+func (h *Handler) Bind%sTo%s(ctx context.Context, req *api.Bind%sTo%sRequest) (*emptypb.Empty, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	err = h.BizService.Bind%sTo%s(ctx, req.%sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Bind%sTo%s failed")
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+`, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // 注释
+		table2PluralStructName, table1StructName, table2PluralStructName, table1StructName, // 函数名
+		table2PluralStructName, table1StructName, table1StructName, table2StructName, // biz调用
+		table2PluralStructName, table1StructName)) // 错误日志
+
+	// 生成Bind{Table1}sTo{Table2}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+// 给指定%s批量分配%s
+func (h *Handler) Bind%sTo%s(ctx context.Context, req *api.Bind%sTo%sRequest) (*emptypb.Empty, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	err = h.BizService.Bind%sTo%s(ctx, req.%sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Bind%sTo%s failed")
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+`, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // 注释
+		table1PluralStructName, table2StructName, table1PluralStructName, table2StructName, // 函数名
+		table1PluralStructName, table2StructName, table2StructName, table1StructName, // biz调用
+		table1PluralStructName, table2StructName)) // 错误日志
+
+	// 生成Unbind{Table2}sFrom{Table1}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+// 从指定%s解除与多个%s的关联
+func (h *Handler) Unbind%sFrom%s(ctx context.Context, req *api.Unbind%sFrom%sRequest) (*emptypb.Empty, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	err = h.BizService.Unbind%sFrom%s(ctx, req.%sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Unbind%sFrom%s failed")
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+`, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // 注释
+		table2PluralStructName, table1StructName, table2PluralStructName, table1StructName, // 函数名
+		table2PluralStructName, table1StructName, table1StructName, table2StructName, // biz调用
+		table2PluralStructName, table1StructName)) // 错误日志
+
+	// 生成Unbind{Table1}sFrom{Table2}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+// 从指定%s解除与多个%s的关联
+func (h *Handler) Unbind%sFrom%s(ctx context.Context, req *api.Unbind%sFrom%sRequest) (*emptypb.Empty, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+
+	err = h.BizService.Unbind%sFrom%s(ctx, req.%sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Unbind%sFrom%s failed")
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+`, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // 注释
+		table1PluralStructName, table2StructName, table1PluralStructName, table2StructName, // 函数名
+		table1PluralStructName, table2StructName, table2StructName, table1StructName, // biz调用
+		table1PluralStructName, table2StructName)) // 错误日志
+}
+
+// generateBRHandlerFilterAssignment 生成BR表handler中的filter赋值代码
+func generateBRHandlerFilterAssignment(table *model.Table) string {
+	var buf strings.Builder
+
+	// 根据表的字段生成filter赋值
+	for _, field := range table.Columns {
+		if field.Name == "id" {
+			continue // id字段不需要在filter中
+		}
+
+		// 只为支持筛选的字段生成filter赋值
+		if field.IsFilter {
+			fieldStructName := helper.GetStructName(field.Name)
+			buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,", fieldStructName, fieldStructName))
+		}
+	}
+
+	return buf.String()
+}
+
+// generateBRTableHTTPHandlerMethod 生成BR表的HTTP handler查询方法（包含请求结构体）
+func generateBRTableHTTPHandlerMethod(methodsBuf *strings.Builder, brTable, sourceTable, targetTable *model.Table) {
+	sourceTableStructName := helper.GetStructName(sourceTable.Name)
+	targetTableStructName := helper.GetStructName(targetTable.Name)
+	sourceTableVarName := helper.GetVarName(sourceTable.Name)
+	targetTableVarName := helper.GetVarName(targetTable.Name)
+	sourceTableURIName := helper.GetURIName(sourceTable.Name)
+	targetTableURIName := helper.GetURIName(targetTable.Name)
+
+	// 先生成请求结构体
+	methodsBuf.WriteString(fmt.Sprintf(`
+type ReqGet%sListBy%sID struct {
+	Page     int `+"`"+`form:"page" binding:"required,gte=1"`+"`"+`      // 页码, 从1开始
+	PageSize int `+"`"+`form:"page_size" binding:"required,gte=1"`+"`"+` // 每页数量, 要求大于0%s%s
+}
+`, targetTableStructName, sourceTableStructName, // 结构体名
+		generateBRHTTPFilterFields(targetTable), // 筛选字段
+		generateBRHTTPOrderFields(targetTable))) // 排序字段
+
+	// 生成筛选字段文档
+	filterDoc := generateBRFilterDoc(targetTable)
+	// 生成排序字段文档
+	orderDoc := generateBROrderDoc(targetTable)
+	// 生成筛选条件赋值
+	filterAssign := generateBRHTTPFilterAssign(targetTable)
+	// 生成排序条件赋值
+	orderAssign := generateBRHTTPOrderAssign(targetTable)
+
+	// 生成方法：Get{TargetTable}ListBy{SourceTable}ID
+	methodsBuf.WriteString(fmt.Sprintf(`
+// @Id			Get%sListBy%sID
+// @Tags		%s
+// @Summary	获取与指定%s关联的%s列表
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string	true	"Bearer <jwt-token>"
+// @Param		%s_id			path		int		true	"%sID"
+// @Param		page			query		int		true	"页码, 从1开始"
+// @Param		page_size		query		int		true	"每页数量, 要求大于0"%s%s
+// @Success	200				{object}	RspData{data=%sList}
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%s/{%s_id}/%s [get]
+func (h *Handler) Get%sListBy%sID(c *gin.Context) {
+	%sId := jgstr.UintVal(c.Param("%s_id"))
+	var req ReqGet%sListBy%sID
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("req", jgstr.JsonEncode(req))
+
+	opt := &biz.%sListOption{
+		Pagination: &option.PaginationOption{
+			Page:     req.Page,
+			PageSize: req.PageSize,
+		},%s
+		Filter: &biz.%sFilterOption{%s
+		},
+	}
+	%sBOs, total, err := h.BizService.Get%sListBy%sID(ctx, %sId, opt)
+	if err != nil {
+		log.WithError(err).Error("BizService.Get%sListBy%sID failed")
+		ResponseFail(c, err)
+		return
+	}
+	list, err := h.To%sListInfo(ctx, %sBOs)
+	if err != nil {
+		log.WithError(err).Error("convert %sListBO to %sListInfo failed")
+		ResponseFail(c, err)
+		return
+	}
+	ResponseSuccess(c, %sList{
+		List:  list,
+		Total: total,
+	})
+}
+`, targetTableStructName, sourceTableStructName, // Swagger ID
+		brTable.Comment, sourceTable.Comment, targetTable.Comment, // Swagger Summary
+		sourceTableVarName, sourceTable.Comment, // Swagger Param
+		filterDoc, orderDoc, // Swagger Param docs
+		targetTableStructName,                                      // Swagger Success
+		sourceTableURIName, sourceTableVarName, targetTableURIName, // Swagger Router
+		targetTableStructName, sourceTableStructName, // 函数名
+		sourceTableVarName, sourceTableVarName, // 参数解析
+		targetTableStructName, sourceTableStructName, // 请求结构体
+		sourceTableVarName, sourceTableVarName, // log字段
+		targetTableStructName,               // biz option
+		orderAssign,                         // order赋值
+		targetTableStructName, filterAssign, // filter赋值
+		targetTableVarName, targetTableStructName, sourceTableStructName, sourceTableVarName, // biz调用
+		targetTableStructName, sourceTableStructName, // biz调用错误日志
+		targetTableStructName, targetTableVarName, // 转换调用
+		targetTableStructName, targetTableStructName, // 转换错误日志
+		targetTableStructName)) // 响应
+}
+
+// generateBRHTTPFilterAssign 生成BR表HTTP handler中的筛选条件赋值代码
+func generateBRHTTPFilterAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		fieldStructName := helper.GetStructName(col.Name)
+		buf.WriteString(fmt.Sprintf("\n\t\t\t%s: req.%s,", fieldStructName, fieldStructName))
+	}
+	return buf.String()
+}
+
+// generateBRHTTPOrderAssign 生成BR表HTTP handler中的排序条件赋值代码
+func generateBRHTTPOrderAssign(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t\tOrder: &option.OrderOption{")
+	buf.WriteString("\n\t\t\tOrderBy:   req.OrderBy,")
+	buf.WriteString("\n\t\t\tOrderType: req.OrderType,")
+	buf.WriteString("\n\t\t},")
+	return buf.String()
+}
+
+// generateBRTableHTTPHandlerBatchMethods 生成BR表的HTTP handler批量操作方法
+func generateBRTableHTTPHandlerBatchMethods(methodsBuf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+	table1VarName := helper.GetVarName(brRelatedTables.Table1.Name)
+	table2VarName := helper.GetVarName(brRelatedTables.Table2.Name)
+	table1URIName := helper.GetURIName(brRelatedTables.Table1.Name)
+	table2URIName := helper.GetURIName(brRelatedTables.Table2.Name)
+
+	// 生成Bind{Table2}sTo{Table1}方法
+	table1PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table1.Name))
+	table2PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table2.Name))
+
+	// 先生成请求结构体
+	methodsBuf.WriteString(fmt.Sprintf(`
+type ReqBind%sTo%s struct {
+	%sIds []uint64 `+"`"+`json:"%s_ids" binding:"required"`+"`"+` // %sID列表
+}
+`, table2PluralStructName, table1StructName, // 结构体名
+		table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment)) // 字段
+
+	methodsBuf.WriteString(fmt.Sprintf(`
+// @Id			Bind%sTo%s
+// @Tags		%s
+// @Summary	给指定%s批量分配%s
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string			true	"Bearer <jwt-token>"
+// @Param		%s_id			path		int				true	"%sID"
+// @Param		body			body		ReqBind%sTo%s	true	"批量分配请求"
+// @Success	200				{object}	RspBase
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%s/{%s_id}/bind-%s [post]
+func (h *Handler) Bind%sTo%s(c *gin.Context) {
+	%sId := jgstr.UintVal(c.Param("%s_id"))
+	var req ReqBind%sTo%s
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("req", jgstr.JsonEncode(req))
+
+	err = h.BizService.Bind%sTo%s(ctx, %sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Bind%sTo%s failed")
+		ResponseFail(c, err)
+		return
+	}
+
+	ResponseSuccess(c, nil)
+}
+`, table2PluralStructName, table1StructName, // Swagger ID
+		brTable.Comment, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // Swagger Summary
+		table1VarName, brRelatedTables.Table1.Comment, // Swagger Param
+		table2PluralStructName, table1StructName, // Swagger Body
+		table1URIName, table1VarName, table2URIName, // Swagger Router
+		table2PluralStructName, table1StructName, // 函数名
+		table1VarName, table1VarName, // 参数解析
+		table2PluralStructName, table1StructName, // 请求结构体
+		table1VarName, table1VarName, // log字段
+		table2PluralStructName, table1StructName, table1VarName, table2StructName, // biz调用
+		table2PluralStructName, table1StructName)) // biz调用错误日志
+
+	// 生成Bind{Table1}sTo{Table2}方法
+	// 先生成请求结构体
+	methodsBuf.WriteString(fmt.Sprintf(`
+type ReqBind%sTo%s struct {
+	%sIds []uint64 `+"`"+`json:"%s_ids" binding:"required"`+"`"+` // %sID列表
+}
+`, table1PluralStructName, table2StructName, // 结构体名
+		table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment)) // 字段
+
+	methodsBuf.WriteString(fmt.Sprintf(`
+// @Id			Bind%sTo%s
+// @Tags		%s
+// @Summary	给指定%s批量分配%s
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string			true	"Bearer <jwt-token>"
+// @Param		%s_id			path		int				true	"%sID"
+// @Param		body			body		ReqBind%sTo%s	true	"批量分配请求"
+// @Success	200				{object}	RspBase
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%s/{%s_id}/bind-%s [post]
+func (h *Handler) Bind%sTo%s(c *gin.Context) {
+	%sId := jgstr.UintVal(c.Param("%s_id"))
+	var req ReqBind%sTo%s
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("req", jgstr.JsonEncode(req))
+
+	err = h.BizService.Bind%sTo%s(ctx, %sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Bind%sTo%s failed")
+		ResponseFail(c, err)
+		return
+	}
+
+	ResponseSuccess(c, nil)
+}
+`, table1PluralStructName, table2StructName, // Swagger ID
+		brTable.Comment, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // Swagger Summary
+		table2VarName, brRelatedTables.Table2.Comment, // Swagger Param
+		table1PluralStructName, table2StructName, // Swagger Body
+		table2URIName, table2VarName, table1URIName, // Swagger Router
+		table1PluralStructName, table2StructName, // 函数名
+		table2VarName, table2VarName, // 参数解析
+		table1PluralStructName, table2StructName, // 请求结构体
+		table2VarName, table2VarName, // log字段
+		table1PluralStructName, table2StructName, table2VarName, table1StructName, // biz调用
+		table1PluralStructName, table2StructName)) // biz调用错误日志
+
+	// 生成Unbind{Table2}sFrom{Table1}方法
+	// 先生成请求结构体
+	methodsBuf.WriteString(fmt.Sprintf(`
+type ReqUnbind%sFrom%s struct {
+	%sIds []uint64 `+"`"+`json:"%s_ids" binding:"required"`+"`"+` // %sID列表
+}
+`, table2PluralStructName, table1StructName, // 结构体名
+		table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment)) // 字段
+
+	methodsBuf.WriteString(fmt.Sprintf(`
+// @Id			Unbind%sFrom%s
+// @Tags		%s
+// @Summary	从指定%s解除与多个%s的关联
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string				true	"Bearer <jwt-token>"
+// @Param		%s_id			path		int					true	"%sID"
+// @Param		body			body		ReqUnbind%sFrom%s	true	"批量解绑请求"
+// @Success	200				{object}	RspBase
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%s/{%s_id}/unbind-%s [post]
+func (h *Handler) Unbind%sFrom%s(c *gin.Context) {
+	%sId := jgstr.UintVal(c.Param("%s_id"))
+	var req ReqUnbind%sFrom%s
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("req", jgstr.JsonEncode(req))
+
+	err = h.BizService.Unbind%sFrom%s(ctx, %sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Unbind%sFrom%s failed")
+		ResponseFail(c, err)
+		return
+	}
+
+	ResponseSuccess(c, nil)
+}
+`, table2PluralStructName, table1StructName, // Swagger ID
+		brTable.Comment, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // Swagger Summary
+		table1VarName, brRelatedTables.Table1.Comment, // Swagger Param
+		table2PluralStructName, table1StructName, // Swagger Body
+		table1URIName, table1VarName, table2URIName, // Swagger Router
+		table2PluralStructName, table1StructName, // 函数名
+		table1VarName, table1VarName, // 参数解析
+		table2PluralStructName, table1StructName, // 请求结构体
+		table1VarName, table1VarName, // log字段
+		table2PluralStructName, table1StructName, table1VarName, table2StructName, // biz调用
+		table2PluralStructName, table1StructName)) // biz调用错误日志
+
+	// 生成Unbind{Table1}sFrom{Table2}方法
+	// 先生成请求结构体
+	methodsBuf.WriteString(fmt.Sprintf(`
+type ReqUnbind%sFrom%s struct {
+	%sIds []uint64 `+"`"+`json:"%s_ids" binding:"required"`+"`"+` // %sID列表
+}
+`, table1PluralStructName, table2StructName, // 结构体名
+		table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment)) // 字段
+
+	methodsBuf.WriteString(fmt.Sprintf(`
+// @Id			Unbind%sFrom%s
+// @Tags		%s
+// @Summary	从指定%s解除与多个%s的关联
+// @Description
+// @Accept		json
+// @Produce	json
+// @Param		Authorization	header		string				true	"Bearer <jwt-token>"
+// @Param		%s_id			path		int					true	"%sID"
+// @Param		body			body		ReqUnbind%sFrom%s	true	"批量解绑请求"
+// @Success	200				{object}	RspBase
+// @Failure	400				{object}	RspBase
+// @Router		/api/v1/%s/{%s_id}/unbind-%s [post]
+func (h *Handler) Unbind%sFrom%s(c *gin.Context) {
+	%sId := jgstr.UintVal(c.Param("%s_id"))
+	var req ReqUnbind%sFrom%s
+	err := shouldBind(c, &req)
+	if err != nil {
+		ResponseFail(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("req", jgstr.JsonEncode(req))
+
+	err = h.BizService.Unbind%sFrom%s(ctx, %sId, req.%sIds)
+	if err != nil {
+		log.WithError(err).Error("BizService.Unbind%sFrom%s failed")
+		ResponseFail(c, err)
+		return
+	}
+
+	ResponseSuccess(c, nil)
+}
+`, table1PluralStructName, table2StructName, // Swagger ID
+		brTable.Comment, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // Swagger Summary
+		table2VarName, brRelatedTables.Table2.Comment, // Swagger Param
+		table1PluralStructName, table2StructName, // Swagger Body
+		table2URIName, table2VarName, table1URIName, // Swagger Router
+		table1PluralStructName, table2StructName, // 函数名
+		table2VarName, table2VarName, // 参数解析
+		table1PluralStructName, table2StructName, // 请求结构体
+		table2VarName, table2VarName, // log字段
+		table1PluralStructName, table2StructName, table2VarName, table1StructName, // biz调用
+		table1PluralStructName, table2StructName)) // biz调用错误日志
+}
+
+// generateBRHTTPFilterFields 生成BR表HTTP请求结构体中的筛选字段
+func generateBRHTTPFilterFields(table *model.Table) string {
+	var buf strings.Builder
+	hasFilterCol := false
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			hasFilterCol = true
+			break
+		}
+	}
+	if !hasFilterCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t// 筛选条件")
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+		fieldName := helper.GetStructName(col.Name)
+		formName := helper.GetVarName(col.Name)
+
+		// 根据字段类型生成不同的binding规则
+		var bindingRule string
+		if col.IsRequired {
+			bindingRule = fmt.Sprintf("required,max=%d", col.Length)
+		} else {
+			bindingRule = fmt.Sprintf("omitempty,max=%d", col.Length)
+		}
+
+		// 生成字段
+		buf.WriteString(fmt.Sprintf("\n\t%s *string `form:\"%s\" binding:\"%s\"` // %s",
+			fieldName, formName, bindingRule, col.Comment))
+	}
+	return buf.String()
+}
+
+// generateBRHTTPOrderFields 生成BR表HTTP请求结构体中的排序字段
+func generateBRHTTPOrderFields(table *model.Table) string {
+	var buf strings.Builder
+	hasOrderCol := false
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+	if !hasOrderCol {
+		return ""
+	}
+
+	buf.WriteString("\n\t// 排序条件")
+	buf.WriteString("\n\tOrderBy   *string `form:\"order_by\" binding:\"omitempty\"`   // 排序字段")
+	buf.WriteString("\n\tOrderType *string `form:\"order_type\" binding:\"omitempty\"` // 排序类型: asc, desc")
 	return buf.String()
 }

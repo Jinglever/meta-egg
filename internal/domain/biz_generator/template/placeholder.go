@@ -48,4 +48,14 @@ const (
 
 	// 新增级联删除占位符
 	PH_RL_CASCADE_DELETE_IN_BIZ = "%%RL-CASCADE-DELETE-IN-BIZ%%"
+
+	// BR table cascade unbind placeholder
+	PH_BR_CASCADE_UNBIND_IN_BIZ = "%%BR-CASCADE-UNBIND-IN-BIZ%%"
+
+	// BR table related placeholders
+	PH_BR_OPTIONS = "%%BR-OPTIONS%%"
+	PH_BR_METHODS = "%%BR-METHODS%%"
+
+	// BR table biz layer placeholders (for BR table's own biz file)
+	PH_BR_RELATION_METHODS = "%%BR-RELATION-METHODS%%"
 )

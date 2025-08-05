@@ -21,6 +21,7 @@ type %%TABLE-NAME-STRUCT%%Repo interface {
 	gen.%%TABLE-NAME-STRUCT%%Repo
 
 	GetList(ctx context.Context, opt *option.%%TABLE-NAME-STRUCT%%ListOption) ([]*model.%%TABLE-NAME-STRUCT%%, int64, error)
+	%%BR-REPO-INTERFACE%%
 }
 
 type %%TABLE-NAME-STRUCT%%RepoImpl struct {
@@ -39,10 +40,10 @@ func (r *%%TABLE-NAME-STRUCT%%RepoImpl) GetList(ctx context.Context, opt *option
 	log := contexts.GetLogger(ctx).
 		WithField("opt", jgstr.JsonEncode(opt))
 	ops := make([]gormx.Option, 0)
-	if opt.Filter != nil {
+	if opt != nil && opt.Filter != nil {
 		ops = append(ops, opt.Filter.GetRepoOptions()...)
 	}
-	if opt.Order != nil {
+	if opt != nil && opt.Order != nil {
 		validOrderby := []string{
 			%%ORDER-BY-LIST%%
 		}
@@ -56,10 +57,10 @@ func (r *%%TABLE-NAME-STRUCT%%RepoImpl) GetList(ctx context.Context, opt *option
 	if total == 0 {
 		return make([]*model.%%TABLE-NAME-STRUCT%%, 0), 0, nil
 	}
-	if opt.Pagination != nil {
+	if opt != nil && opt.Pagination != nil {
 		ops = append(ops, opt.Pagination.GetRepoOptions()...)
 	}
-	if len(opt.Select) > 0 {
+	if opt != nil && len(opt.Select) > 0 {
 		ops = append(ops, gormx.Select(opt.Select...))
 	}
 	ms, err := r.Gets(ctx, ops...)
@@ -69,4 +70,6 @@ func (r *%%TABLE-NAME-STRUCT%%RepoImpl) GetList(ctx context.Context, opt *option
 	}
 	return ms, total, nil
 }
+
+%%BR-REPO-IMPLEMENTATION%%
 `

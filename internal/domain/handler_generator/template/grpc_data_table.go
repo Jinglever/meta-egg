@@ -193,6 +193,49 @@ func (h *Handler) GetAll%%RL-TABLE-NAME-STRUCT%%(ctx context.Context,
 	}, nil
 }`
 
+// BR表操作函数模板 - gRPC版本
+var TplGRPCBRHandlerGet string = `
+// 获取%%TABLE-COMMENT%%关联的%%OTHER-TABLE-COMMENT%%列表
+func (h *Handler) Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List(ctx context.Context,
+	req *api.Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%ListRequest,
+) (*api.Get%%OTHER-TABLE-NAME-STRUCT%%ListResponse, error) {
+	log := contexts.GetLogger(ctx).
+		WithField("req", jgstr.JsonEncode(req))
+	err := req.ValidateAll()
+	if err != nil {
+		log.WithError(err).Error("req.ValidateAll failed")
+		return nil, cerror.InvalidArgument(err.Error())
+	}
+	
+	// 构建查询选项
+	opt := &biz.%%OTHER-TABLE-NAME-STRUCT%%ListOption{%%OTHER-ASSIGN-ORDER-TO-OPTION-GRPC%%%%OTHER-FILTER-ASSIGN-TO-OPTION-GRPC%%
+	}
+	if req.Pagination != nil {
+		opt.Pagination = &option.PaginationOption{
+			Page:     int(req.Pagination.Page),
+			PageSize: int(req.Pagination.PageSize),
+		}
+	}
+	
+	list, total, err := h.BizService.Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List(ctx, req.%%TABLE-NAME-STRUCT%%Id, opt)
+	if err != nil {
+		log.WithError(err).Error("BizService.Get%%TABLE-NAME-STRUCT%%Related%%OTHER-TABLE-NAME-STRUCT%%List failed")
+		return nil, err
+	}
+	
+	// 转换为gRPC响应格式
+	apiList, err := h.To%%OTHER-TABLE-NAME-STRUCT%%ListInfo(ctx, list)
+	if err != nil {
+		log.WithError(err).Error("convert %%OTHER-TABLE-NAME-STRUCT%%ListBO to %%OTHER-TABLE-NAME-STRUCT%%ListInfo failed")
+		return nil, err
+	}
+	
+	return &api.Get%%OTHER-TABLE-NAME-STRUCT%%ListResponse{
+		List:  apiList,
+		Total: total,
+	}, nil
+}`
+
 var TplGRPCTable string = helper.PH_META_EGG_HEADER + `
 package handler
 
@@ -244,4 +287,5 @@ func (h *Handler) Get%%TABLE-NAME-STRUCT%%Detail(ctx context.Context,
 %%TPL-GRPC-HANDLER-DELETE%%
 
 %%RL-GRPC-HANDLER-FUNCTIONS%%
+%%BR-GRPC-HANDLER-FUNCTIONS%%
 `

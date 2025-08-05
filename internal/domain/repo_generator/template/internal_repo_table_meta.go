@@ -39,10 +39,10 @@ func (r *%%TABLE-NAME-STRUCT%%RepoImpl) GetList(ctx context.Context, opt *option
 	log := contexts.GetLogger(ctx).
 		WithField("opt", jgstr.JsonEncode(opt))
 	ops := make([]gormx.Option, 0)
-	if opt.Filter != nil {
+	if opt != nil && opt.Filter != nil {
 		ops = append(ops, opt.Filter.GetRepoOptions()...)
 	}
-	if opt.Order != nil {
+	if opt != nil && opt.Order != nil {
 		validOrderby := []string{
 			%%ORDER-BY-LIST%%
 		}
@@ -56,10 +56,10 @@ func (r *%%TABLE-NAME-STRUCT%%RepoImpl) GetList(ctx context.Context, opt *option
 	if total == 0 {
 		return make([]*model.%%TABLE-NAME-STRUCT%%, 0), 0, nil
 	}
-	if opt.Pagination != nil {
+	if opt != nil && opt.Pagination != nil {
 		ops = append(ops, opt.Pagination.GetRepoOptions()...)
 	}
-	if len(opt.Select) > 0 {
+	if opt != nil && len(opt.Select) > 0 {
 		ops = append(ops, gormx.Select(opt.Select...))
 	}
 	ms, err := r.Gets(ctx, ops...)

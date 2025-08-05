@@ -2,35 +2,7 @@ package template
 
 import "meta-egg/internal/domain/helper"
 
-var TplSetupMEForCreate string = `if me, ok := contexts.GetME(ctx); ok {
-		%%SET-ME-FOR-CREATE%%
-	}
-`
-
-var TplSetupMEForCreateBatch string = `if me, ok := contexts.GetME(ctx); ok {
-		for _, m := range ms {
-			%%SET-ME-FOR-CREATE%%
-		}
-	}
-`
-
-var TplSetupMEForUpdate string = `if me, ok := contexts.GetME(ctx); ok {
-		setCVs[model.Col%%TABLE-NAME-STRUCT%%%%COL-UPDATED-BY%%] = me.ID
-	}
-`
-
-var TplDefaultDelete string = `result := tx.Delete(&model.%%TABLE-NAME-STRUCT%%{})`
-var TplSoftDeleteWithDeletedBy string = `var result *gorm.DB
-	if me, ok := contexts.GetME(ctx); ok {
-		result = tx.UpdateColumns(map[string]interface{}{
-			model.Col%%TABLE-NAME-STRUCT%%%%COL-DELETED-BY%%: &(me.ID),
-			model.Col%%TABLE-NAME-STRUCT%%%%COL-DELETED-AT%%: %%VAL-DELETED-AT%%,
-		})
-	} else {
-		result = tx.Delete(&model.%%TABLE-NAME-STRUCT%%{})
-	}`
-
-var TplGenRepoDataTable = helper.PH_META_EGG_HEADER + `
+var TplGenRepoBRTable = helper.PH_META_EGG_HEADER + `
 package repo
 
 import (
@@ -58,8 +30,8 @@ type %%TABLE-NAME-STRUCT%%Repo interface {
 	DeleteByID(ctx context.Context, id uint64) (rowsAffected int64, err error)
 	DeleteByIDs(ctx context.Context, ids []uint64) (rowsAffected int64, err error)
 	Count(ctx context.Context, opts ...gormx.Option) (count int64, err error)
-%%RL-METHODS-INTERFACE%%
-%%BR-METHODS-INTERFACE%%
+%%BR-BIND-METHODS-INTERFACE%%
+%%BR-RELATION-METHODS-INTERFACE%%
 }
 
 type %%TABLE-NAME-STRUCT%%RepoImpl struct {
@@ -78,7 +50,7 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Gets(ctx context.Context, opts ...gormx.
 	for _, opt := range opts {
 		tx = opt(tx)
 	}
-%%RL-LIST-PRELOAD%%	if err := tx.Find(&ms).Error; err != nil {
+	if err := tx.Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	return ms, nil
@@ -92,7 +64,7 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) GetByID(ctx context.Context, id uint64, 
 	for _, opt := range opts {
 		tx = opt(tx)
 	}
-%%RL-DETAIL-PRELOAD%%	if err := tx.Find(&ms).Error; err != nil {
+	if err := tx.Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	if len(ms) == 0 {
@@ -165,6 +137,7 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) UpdateByIDs(ctx context.Context, ids []u
 	return s.Update(ctx, setCVs, incCVs, gormx.Where(model.Col%%TABLE-NAME-STRUCT%%%%COL-ID%%+" in (?)", ids))
 }
 
+// delete
 func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Delete(ctx context.Context, opts ...gormx.Option) (rowsAffected int64, err error) {
 	tx := s.GetTX(ctx).Model(&model.%%TABLE-NAME-STRUCT%%{})
 	for _, opt := range opts {
@@ -205,7 +178,7 @@ func (s *%%TABLE-NAME-STRUCT%%RepoImpl) Count(ctx context.Context, opts ...gormx
 	return
 }
 
-%%RL-METHODS-IMPLEMENTATION%%
+%%BR-BIND-METHODS-IMPLEMENTATION%%
 
-%%BR-METHODS-IMPLEMENTATION%%
+%%BR-RELATION-METHODS-IMPLEMENTATION%%
 `
