@@ -1033,7 +1033,7 @@ func genBRTableBizMethods(code *string, table *model.Table) {
 	generateBRTableBizMethod(&methodsBuf, table, brRelatedTables.Table1, brRelatedTables.Table2)
 	generateBRTableBizMethod(&methodsBuf, table, brRelatedTables.Table2, brRelatedTables.Table1)
 
-	// 生成批量操作方法
+	// 生成批量操作方法（包含具体的Bind方法）
 	generateBRTableBizBatchMethods(&methodsBuf, table, brRelatedTables)
 
 	// 替换占位符
@@ -1092,27 +1092,49 @@ func generateBRTableBizBatchMethods(methodsBuf *strings.Builder, brTable *model.
 	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
 	brTableStructName := helper.GetStructName(brTable.Name)
 
-	// 生成Bind{BRTable}Batch方法
+	// 生成Bind{Table2}sTo{Table1}和Bind{Table1}sTo{Table2}方法
+	table1PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table1.Name))
+	table2PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table2.Name))
+
 	methodsBuf.WriteString(fmt.Sprintf(`
-func (b *BizService) Bind%sBatch(ctx context.Context, %sIds []uint64, %sIds []uint64) error {
+func (b *BizService) Bind%sTo%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
 	log := contexts.GetLogger(ctx).
-		WithField("%sIds", %sIds).
+		WithField("%sId", %sId).
 		WithField("%sIds", %sIds)
 
-	err := b.%sRepo.BindBatch(ctx, %sIds, %sIds)
+	err := b.%sRepo.BindBatch(ctx, []uint64{%sId}, %sIds)
 	if err != nil {
-		log.WithError(err).Error("fail to bind batch %s relationships")
+		log.WithError(err).Error("fail to bind %s to %s")
 		return cerror.Internal(err.Error())
 	}
 	return nil
 }
-`, brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数名和参数
+`, table2PluralStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数名和参数
 		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段1
 		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段2
 		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // repo调用
-		brTable.Name)) // 错误日志
+		helper.GetPluralName(brRelatedTables.Table2.Name), brRelatedTables.Table1.Name)) // 错误日志
 
-	// 生成Unbind{BRTable}From{Table1}方法
+	methodsBuf.WriteString(fmt.Sprintf(`
+func (b *BizService) Bind%sTo%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
+	log := contexts.GetLogger(ctx).
+		WithField("%sId", %sId).
+		WithField("%sIds", %sIds)
+
+	err := b.%sRepo.BindBatch(ctx, %sIds, []uint64{%sId})
+	if err != nil {
+		log.WithError(err).Error("fail to bind %s to %s")
+		return cerror.Internal(err.Error())
+	}
+	return nil
+}
+`, table1PluralStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // 函数名和参数
+		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段1
+		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段2
+		brTableStructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // repo调用
+		helper.GetPluralName(brRelatedTables.Table1.Name), brRelatedTables.Table2.Name)) // 错误日志
+
+	// 生成Unbind{Table2}sFrom{Table1}方法
 	methodsBuf.WriteString(fmt.Sprintf(`
 func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
 	log := contexts.GetLogger(ctx).
@@ -1121,18 +1143,18 @@ func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []ui
 
 	_, err := b.%sRepo.UnbindBatchFrom%s(ctx, %sId, %sIds)
 	if err != nil {
-		log.WithError(err).Error("fail to unbind batch %s relationships from %s")
+		log.WithError(err).Error("fail to unbind %s from %s")
 		return cerror.Internal(err.Error())
 	}
 	return nil
 }
-`, brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数签名
+`, table2PluralStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // 函数签名
 		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段1
 		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段2
 		brTableStructName, table1StructName, helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table2.Name), // repo调用
-		brTable.Name, brRelatedTables.Table1.Name)) // 错误日志
+		helper.GetPluralName(brRelatedTables.Table2.Name), brRelatedTables.Table1.Name)) // 错误日志
 
-	// 生成Unbind{BRTable}From{Table2}方法
+	// 生成Unbind{Table1}sFrom{Table2}方法
 	methodsBuf.WriteString(fmt.Sprintf(`
 func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []uint64) error {
 	log := contexts.GetLogger(ctx).
@@ -1141,16 +1163,16 @@ func (b *BizService) Unbind%sFrom%s(ctx context.Context, %sId uint64, %sIds []ui
 
 	_, err := b.%sRepo.UnbindBatchFrom%s(ctx, %sId, %sIds)
 	if err != nil {
-		log.WithError(err).Error("fail to unbind batch %s relationships from %s")
+		log.WithError(err).Error("fail to unbind %s from %s")
 		return cerror.Internal(err.Error())
 	}
 	return nil
 }
-`, brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // 函数签名
+`, table1PluralStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // 函数签名
 		helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table2.Name), // log字段1
 		helper.GetVarName(brRelatedTables.Table1.Name), helper.GetVarName(brRelatedTables.Table1.Name), // log字段2
 		brTableStructName, table2StructName, helper.GetVarName(brRelatedTables.Table2.Name), helper.GetVarName(brRelatedTables.Table1.Name), // repo调用
-		brTable.Name, brRelatedTables.Table2.Name)) // 错误日志
+		helper.GetPluralName(brRelatedTables.Table1.Name), brRelatedTables.Table2.Name)) // 错误日志
 }
 
 // genBRCascadeUnbindInBiz 生成BR表级联解绑逻辑（在主表的delete函数中）

@@ -83,3 +83,9 @@ func GetURIName(name string) string {
 	plz := pluralize.NewClient()
 	return plz.Plural(name)
 }
+
+// 获取复数形式的名称
+func GetPluralName(name string) string {
+	plz := pluralize.NewClient()
+	return plz.Plural(name)
+}

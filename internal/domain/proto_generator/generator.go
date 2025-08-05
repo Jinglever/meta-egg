@@ -71,6 +71,15 @@ func Generate(codeDir string, project *model.Project) (relativeDir2NeedConfirm m
 						return
 					}
 					tableImportInProject.WriteString(fmt.Sprintf("import \"%s.proto\";\n", helper.GetDirName(table.Name)))
+				} else if table.Type == model.TableType_BR {
+					// 为BR表生成独立的proto文件
+					path = filepath.Join(codeDir, "proto", helper.GetDirName(table.Name)+".proto")
+					err = generateNonGoFileForBRTable(path, template.TplProtoBRTable, project, table, helper.AddHeaderCanEdit)
+					if err != nil {
+						log.Errorf("generate proto/%v.proto failed: %v", helper.GetDirName(table.Name), err)
+						return
+					}
+					tableImportInProject.WriteString(fmt.Sprintf("import \"%s.proto\";\n", helper.GetDirName(table.Name)))
 				}
 			}
 		}
@@ -153,6 +162,26 @@ func generateNonGoFileForProjProto(path string, tpl string, project *model.Proje
 	return nil
 }
 
+func generateNonGoFileForBRTable(path string, tpl string, project *model.Project,
+	table *model.Table, addHeader func(s string) string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		log.Errorf("create file %s failed: %v", path, err)
+		return err
+	}
+	defer f.Close()
+
+	// template
+	code := tpl
+	if addHeader != nil {
+		code = addHeader(code)
+	}
+	replaceTplForBRTable(&code, project, table)
+
+	f.Write([]byte(code))
+	return nil
+}
+
 func replaceTpl(code *string, project *model.Project, table *model.Table) {
 	genHandlerMessage(code, project, table)
 	genHandlerFunction(code, project)
@@ -177,6 +206,233 @@ func replaceTplForTable(code *string, table *model.Table) {
 	*code = strings.ReplaceAll(*code, template.PH_TABLE_COMMENT, table.Comment)
 	*code = strings.ReplaceAll(*code, template.PH_TABLE_NAME_URI, helper.GetURIName(table.Name))
 	*code = strings.ReplaceAll(*code, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(table.Name))
+}
+
+func replaceTplForBRTable(code *string, project *model.Project, table *model.Table) {
+	genBRTableHandlerMessage(code, project, table)
+	// BR表不需要service函数，因为它们会被添加到主项目的service中
+	*code = strings.ReplaceAll(*code, template.PH_HANDLER_FUNCTION, "")
+
+	*code = strings.ReplaceAll(*code, template.PH_GO_MODULE, project.GoModule)
+	*code = strings.ReplaceAll(*code, template.PH_PROJECT_NAME, project.Name)
+	*code = strings.ReplaceAll(*code, template.PH_PROJECT_NAME_DIR, helper.GetDirName(project.Name))
+	*code = strings.ReplaceAll(*code, template.PH_PROJECT_NAME_PKG, helper.GetPkgName(project.Name))
+	*code = strings.ReplaceAll(*code, template.PH_PROJECT_NAME_STRUCT, helper.GetStructName(project.Name))
+}
+
+// genBRTableHandlerMessage 为BR表生成proto message
+func genBRTableHandlerMessage(code *string, project *model.Project, table *model.Table) {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range project.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表的两个关联表
+	brRelatedTables := helper.IdentifyBRRelatedTables(table, tableNameToTable)
+	if brRelatedTables == nil {
+		*code = strings.ReplaceAll(*code, template.PH_HANDLER_MESSAGE, "")
+		return
+	}
+
+	var buf strings.Builder
+
+	// 生成查询请求和响应message
+	generateBRTableQueryMessages(&buf, table, brRelatedTables)
+
+	// 生成批量操作请求message
+	generateBRTableBatchMessages(&buf, table, brRelatedTables)
+
+	*code = strings.ReplaceAll(*code, template.PH_HANDLER_MESSAGE, buf.String())
+}
+
+// generateBRTableQueryMessages 生成BR表查询相关的proto message
+func generateBRTableQueryMessages(buf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+
+	// 生成Get{Table2}ListBy{Table1}ID请求message
+	buf.WriteString(fmt.Sprintf(`
+message Get%sListBy%sIDRequest {
+  uint64 %s_id = 1; // %sID
+  uint32 page = 2; // 页码, 从1开始
+  uint32 page_size = 3; // 每页数量, 要求大于0
+%s%s}
+`, table2StructName, table1StructName, // message名
+		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment, // 字段
+		generateBRProtoFilterFields(brRelatedTables.Table2, 4), // 筛选字段
+		generateBRProtoOrderFields(brRelatedTables.Table2, 4))) // 排序字段
+
+	// 生成Get{Table1}ListBy{Table2}ID请求message
+	buf.WriteString(fmt.Sprintf(`
+message Get%sListBy%sIDRequest {
+  uint64 %s_id = 1; // %sID
+  uint32 page = 2; // 页码, 从1开始
+  uint32 page_size = 3; // 每页数量, 要求大于0
+%s%s}
+`, table1StructName, table2StructName, // message名
+		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment, // 字段
+		generateBRProtoFilterFields(brRelatedTables.Table1, 4), // 筛选字段
+		generateBRProtoOrderFields(brRelatedTables.Table1, 4))) // 排序字段
+
+	// 响应message复用主表的定义，不需要在BR表proto文件中重复定义
+}
+
+// generateBRProtoFilterFields 生成BR表proto message中的筛选字段
+func generateBRProtoFilterFields(table *model.Table, startFieldNum int) string {
+	var buf strings.Builder
+	fieldNum := startFieldNum
+
+	for _, col := range table.Columns {
+		if !col.IsFilter || col.IsHidden {
+			continue
+		}
+
+		fieldName := helper.GetVarName(col.Name)
+		buf.WriteString(fmt.Sprintf("  optional string %s = %d; // %s\n", fieldName, fieldNum, col.Comment))
+		fieldNum++
+	}
+
+	return buf.String()
+}
+
+// generateBRProtoOrderFields 生成BR表proto message中的排序字段
+func generateBRProtoOrderFields(table *model.Table, startFieldNum int) string {
+	var buf strings.Builder
+	hasOrderCol := false
+
+	for _, col := range table.Columns {
+		if col.IsOrder && !col.IsHidden {
+			hasOrderCol = true
+			break
+		}
+	}
+
+	if !hasOrderCol {
+		return ""
+	}
+
+	fieldNum := startFieldNum
+	// 找到筛选字段的数量，调整起始字段号
+	for _, col := range table.Columns {
+		if col.IsFilter && !col.IsHidden {
+			fieldNum++
+		}
+	}
+
+	buf.WriteString(fmt.Sprintf("  optional string order_by = %d; // 排序字段\n", fieldNum))
+	buf.WriteString(fmt.Sprintf("  optional string order_type = %d; // 排序类型: asc, desc\n", fieldNum+1))
+
+	return buf.String()
+}
+
+// generateBRTableBatchMessages 生成BR表批量操作相关的proto message
+func generateBRTableBatchMessages(buf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+	table1PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table1.Name))
+	table2PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table2.Name))
+
+	// 生成批量绑定请求message
+	buf.WriteString(fmt.Sprintf(`
+message Bind%sTo%sRequest {
+  uint64 %s_id = 1; // %sID
+  repeated uint64 %s_ids = 2; // %sID列表
+}
+`, table2PluralStructName, table1StructName, // message名
+		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment, // 字段1
+		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment)) // 字段2
+
+	buf.WriteString(fmt.Sprintf(`
+message Bind%sTo%sRequest {
+  uint64 %s_id = 1; // %sID
+  repeated uint64 %s_ids = 2; // %sID列表
+}
+`, table1PluralStructName, table2StructName, // message名
+		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment, // 字段1
+		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment)) // 字段2
+
+	// 生成批量解绑请求message
+	buf.WriteString(fmt.Sprintf(`
+message Unbind%sFrom%sRequest {
+  uint64 %s_id = 1; // %sID
+  repeated uint64 %s_ids = 2; // %sID列表
+}
+`, table2PluralStructName, table1StructName, // message名
+		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment, // 字段1
+		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment)) // 字段2
+
+	buf.WriteString(fmt.Sprintf(`
+message Unbind%sFrom%sRequest {
+  uint64 %s_id = 1; // %sID
+  repeated uint64 %s_ids = 2; // %sID列表
+}
+`, table1PluralStructName, table2StructName, // message名
+		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment, // 字段1
+		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment)) // 字段2
+}
+
+// generateBRTableServiceFunctions 生成BR表的proto service函数
+func generateBRTableServiceFunctions(buf *strings.Builder, brTable *model.Table, brRelatedTables *helper.BRRelatedTables) {
+	table1StructName := helper.GetStructName(brRelatedTables.Table1.Name)
+	table2StructName := helper.GetStructName(brRelatedTables.Table2.Name)
+	table1PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table1.Name))
+	table2PluralStructName := helper.GetStructName(helper.GetPluralName(brRelatedTables.Table2.Name))
+
+	// 生成查询service函数
+	buf.WriteString(fmt.Sprintf(`    // 获取与指定%s关联的%s列表
+    rpc Get%sListBy%sID (Get%sListBy%sIDRequest) returns (Get%sListResponse) {}
+`, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // 注释
+		table2StructName, table1StructName, table2StructName, table1StructName, table2StructName)) // 函数名
+
+	buf.WriteString(fmt.Sprintf(`    // 获取与指定%s关联的%s列表
+    rpc Get%sListBy%sID (Get%sListBy%sIDRequest) returns (Get%sListResponse) {}
+`, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // 注释
+		table1StructName, table2StructName, table1StructName, table2StructName, table1StructName)) // 函数名
+
+	// 生成批量绑定service函数
+	buf.WriteString(fmt.Sprintf(`    // 给指定%s批量关联%s
+    rpc Bind%sTo%s (Bind%sTo%sRequest) returns (google.protobuf.Empty) {}
+`, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // 注释
+		table2PluralStructName, table1StructName, table2PluralStructName, table1StructName)) // 函数名
+
+	buf.WriteString(fmt.Sprintf(`    // 给指定%s批量关联%s
+    rpc Bind%sTo%s (Bind%sTo%sRequest) returns (google.protobuf.Empty) {}
+`, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // 注释
+		table1PluralStructName, table2StructName, table1PluralStructName, table2StructName)) // 函数名
+
+	// 生成批量解绑service函数
+	buf.WriteString(fmt.Sprintf(`    // 从指定%s解除与多个%s的关联
+    rpc Unbind%sFrom%s (Unbind%sFrom%sRequest) returns (google.protobuf.Empty) {}
+`, brRelatedTables.Table1.Comment, brRelatedTables.Table2.Comment, // 注释
+		table2PluralStructName, table1StructName, table2PluralStructName, table1StructName)) // 函数名
+
+	buf.WriteString(fmt.Sprintf(`    // 从指定%s解除与多个%s的关联
+    rpc Unbind%sFrom%s (Unbind%sFrom%sRequest) returns (google.protobuf.Empty) {}
+`, brRelatedTables.Table2.Comment, brRelatedTables.Table1.Comment, // 注释
+		table1PluralStructName, table2StructName, table1PluralStructName, table2StructName)) // 函数名
+}
+
+// genBRTableServiceFunctions 为BR表生成service函数（用于添加到主service中）
+func genBRTableServiceFunctions(brTable *model.Table, project *model.Project) string {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, t := range project.Database.Tables {
+		tableNameToTable[t.Name] = t
+	}
+
+	// 识别BR表的两个关联表
+	brRelatedTables := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
+	if brRelatedTables == nil {
+		return ""
+	}
+
+	var buf strings.Builder
+
+	// 生成service函数
+	generateBRTableServiceFunctions(&buf, brTable, brRelatedTables)
+
+	return buf.String()
 }
 
 func genColListInVO(code *string, table *model.Table) {
@@ -336,6 +592,10 @@ func genHandlerFunction(code *string, project *model.Project) {
 				replaceTplForTable(&str, table)
 				// META表不需要BR表支持
 				genBRHandlerFunctions(&str, table, project) // 会清空BR占位符
+				buf.WriteString(str)
+			} else if table.Type == model.TableType_BR {
+				// 为BR表生成service函数并添加到主service中
+				str := genBRTableServiceFunctions(table, project)
 				buf.WriteString(str)
 			}
 		}
@@ -591,108 +851,16 @@ func genRLFieldsForCreate(rlTable *model.Table, startFieldIndex int) string {
 	return buf.String()
 }
 
-// genBRMessages 为DATA表生成BR关系的protobuf消息
+// genBRMessages 为DATA表生成BR关系的protobuf消息（已弃用，BR表现在有独立的proto文件）
 func genBRMessages(code *string, table *model.Table, project *model.Project) {
-	if project.Database == nil {
-		// 清空占位符
-		*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, "")
-		return
-	}
-
-	// 构建表名到表的映射
-	tableNameToTable := make(map[string]*model.Table)
-	for _, t := range project.Database.Tables {
-		tableNameToTable[t.Name] = t
-	}
-
-	// 获取当前表的所有BR表关系
-	brTables := helper.GetMainTableBRs(table, project.Database.Tables)
-
-	if len(brTables) == 0 {
-		*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, "")
-		return
-	}
-
-	var messagesBuf strings.Builder
-
-	// 为每个BR表生成相关消息
-	for _, brTable := range brTables {
-		// 获取对方表
-		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
-		if otherTable == nil {
-			continue
-		}
-
-		// 生成请求消息
-		requestMsg := template.TplBRTableMessage
-
-		// 替换当前表相关的占位符
-		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(table.Name))
-		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_COMMENT, table.Comment)
-		requestMsg = strings.ReplaceAll(requestMsg, template.PH_TABLE_NAME_LOWER, helper.GetDirName(table.Name))
-
-		// 替换对方表相关的占位符
-		requestMsg = strings.ReplaceAll(requestMsg, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
-		requestMsg = strings.ReplaceAll(requestMsg, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
-
-		// 生成对方表的筛选字段
-		cnt := 3 // 从3开始，因为已经有id=1, pagination=2
-		cnt = genOtherColListForFilter(&requestMsg, otherTable, cnt)
-		cnt = genOtherColListForOrder(&requestMsg, otherTable, cnt)
-
-		messagesBuf.WriteString(requestMsg)
-	}
-
-	*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, messagesBuf.String())
+	// BR表现在有独立的proto文件，不再在主表proto中生成BR相关message
+	*code = strings.ReplaceAll(*code, template.PH_BR_MESSAGES, "")
 }
 
-// genBRHandlerFunctions 为DATA表生成BR关系的gRPC方法
+// genBRHandlerFunctions 为DATA表生成BR关系的gRPC方法（已弃用，BR表现在有独立的service函数）
 func genBRHandlerFunctions(code *string, table *model.Table, project *model.Project) {
-	if project.Database == nil {
-		// 清空占位符
-		*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, "")
-		return
-	}
-
-	// 构建表名到表的映射
-	tableNameToTable := make(map[string]*model.Table)
-	for _, t := range project.Database.Tables {
-		tableNameToTable[t.Name] = t
-	}
-
-	// 获取当前表的所有BR表关系
-	brTables := helper.GetMainTableBRs(table, project.Database.Tables)
-
-	if len(brTables) == 0 {
-		*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, "")
-		return
-	}
-
-	var handlerFuncsBuf strings.Builder
-
-	// 为每个BR表生成gRPC方法
-	for _, brTable := range brTables {
-		// 获取对方表
-		otherTable := helper.GetBROtherTable(brTable, table, tableNameToTable)
-		if otherTable == nil {
-			continue
-		}
-
-		// 生成gRPC方法
-		handlerFunc := template.TplBRTableHandlerFuncs
-
-		// 替换当前表相关的占位符
-		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_TABLE_NAME_STRUCT, helper.GetStructName(table.Name))
-		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_TABLE_COMMENT, table.Comment)
-
-		// 替换对方表相关的占位符
-		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_OTHER_TABLE_NAME_STRUCT, helper.GetStructName(otherTable.Name))
-		handlerFunc = strings.ReplaceAll(handlerFunc, template.PH_OTHER_TABLE_COMMENT, otherTable.Comment)
-
-		handlerFuncsBuf.WriteString(handlerFunc)
-	}
-
-	*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, handlerFuncsBuf.String())
+	// BR表现在有独立的service函数，不再在主表service中生成BR相关方法
+	*code = strings.ReplaceAll(*code, template.PH_BR_HANDLER_FUNCTIONS, "")
 }
 
 // genOtherColListForFilter 生成对方表的筛选字段（protobuf格式）

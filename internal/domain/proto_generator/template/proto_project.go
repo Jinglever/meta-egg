@@ -121,6 +121,16 @@ package %%PROJECT-NAME-PKG%%;
 %%HANDLER-MESSAGE%%
 `
 
+var TplProtoBRTable string = `syntax = "proto3";
+package %%PROJECT-NAME-PKG%%;
+import "google/protobuf/empty.proto";
+import "github.com/envoyproxy/protoc-gen-validate/validate/validate.proto";
+import "%%PROJECT-NAME-DIR%%_common.proto";
+option go_package = "./%%PROJECT-NAME-DIR%%";
+
+%%HANDLER-MESSAGE%%
+`
+
 var TplProtoImportForMessage string = `import "github.com/envoyproxy/protoc-gen-validate/validate/validate.proto";
 import "%%PROJECT-NAME-DIR%%_common.proto";
 `

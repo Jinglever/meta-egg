@@ -1,6 +1,7 @@
 package svcgen
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,6 +207,10 @@ func genHTTPRouteMapping(code *string, project *model.Project) {
 				str := template.TplHTTPRouteMappingForMetaTable
 				replaceTplForTable(&str, table)
 				buf.WriteString(str)
+			} else if table.Type == model.TableType_BR {
+				// 为BR表生成路由
+				str := genBRHTTPRoutes(table, project)
+				buf.WriteString(str)
 			}
 		}
 	}
@@ -292,4 +297,85 @@ func replaceTplForRLRoute(code *string, mainTable *model.Table, rlTable *model.T
 	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_COMMENT, rlTable.Comment)
 	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME_URI, helper.GetURIName(rlTable.Name))
 	*code = strings.ReplaceAll(*code, template.PH_RL_TABLE_NAME, strings.ToLower(rlTable.Name))
+}
+
+// genBRHTTPRoutes 为BR表生成HTTP路由
+func genBRHTTPRoutes(brTable *model.Table, project *model.Project) string {
+	// 构建表名到表的映射
+	tableNameToTable := make(map[string]*model.Table)
+	for _, table := range project.Database.Tables {
+		tableNameToTable[table.Name] = table
+	}
+
+	// 识别BR表的两个关联表
+	brRelatedTables := helper.IdentifyBRRelatedTables(brTable, tableNameToTable)
+	if brRelatedTables == nil {
+		return ""
+	}
+
+	var buf strings.Builder
+
+	// 生成注释
+	buf.WriteString(fmt.Sprintf("\n\t\t// %s", brTable.Comment))
+
+	// 生成双向查询路由
+	// Table1 -> Table2 的查询路由
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.GET("/%s/{%s_id}/%s", handler.Get%sListBy%sID)`,
+		helper.GetURIName(brRelatedTables.Table1.Name),     // /users
+		helper.GetVarName(brRelatedTables.Table1.Name),     // user_id
+		helper.GetURIName(brRelatedTables.Table2.Name),     // /tags
+		helper.GetStructName(brRelatedTables.Table2.Name),  // Tag
+		helper.GetStructName(brRelatedTables.Table1.Name))) // User
+
+	// Table2 -> Table1 的查询路由
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.GET("/%s/{%s_id}/%s", handler.Get%sListBy%sID)`,
+		helper.GetURIName(brRelatedTables.Table2.Name),     // /tags
+		helper.GetVarName(brRelatedTables.Table2.Name),     // tag_id
+		helper.GetURIName(brRelatedTables.Table1.Name),     // /users
+		helper.GetStructName(brRelatedTables.Table1.Name),  // User
+		helper.GetStructName(brRelatedTables.Table2.Name))) // Tag
+
+	// 生成批量绑定路由
+	// 给Table1批量分配Table2
+	table2PluralName := helper.GetPluralName(brRelatedTables.Table2.Name)
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.POST("/%s/{%s_id}/bind-%s", handler.Bind%sTo%s)`,
+		helper.GetURIName(brRelatedTables.Table1.Name),     // /users
+		helper.GetVarName(brRelatedTables.Table1.Name),     // user_id
+		helper.GetURIName(table2PluralName),                // /tags
+		helper.GetStructName(table2PluralName),             // Tags
+		helper.GetStructName(brRelatedTables.Table1.Name))) // User
+
+	// 给Table2批量分配Table1
+	table1PluralName := helper.GetPluralName(brRelatedTables.Table1.Name)
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.POST("/%s/{%s_id}/bind-%s", handler.Bind%sTo%s)`,
+		helper.GetURIName(brRelatedTables.Table2.Name),     // /tags
+		helper.GetVarName(brRelatedTables.Table2.Name),     // tag_id
+		helper.GetURIName(table1PluralName),                // /users
+		helper.GetStructName(table1PluralName),             // Users
+		helper.GetStructName(brRelatedTables.Table2.Name))) // Tag
+
+	// 生成批量解绑路由
+	// 从Table1解绑Table2
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.POST("/%s/{%s_id}/unbind-%s", handler.Unbind%sFrom%s)`,
+		helper.GetURIName(brRelatedTables.Table1.Name),     // /users
+		helper.GetVarName(brRelatedTables.Table1.Name),     // user_id
+		helper.GetURIName(table2PluralName),                // /tags
+		helper.GetStructName(table2PluralName),             // Tags
+		helper.GetStructName(brRelatedTables.Table1.Name))) // User
+
+	// 从Table2解绑Table1
+	buf.WriteString(fmt.Sprintf(`
+		apiGroup.POST("/%s/{%s_id}/unbind-%s", handler.Unbind%sFrom%s)`,
+		helper.GetURIName(brRelatedTables.Table2.Name),     // /tags
+		helper.GetVarName(brRelatedTables.Table2.Name),     // tag_id
+		helper.GetURIName(table1PluralName),                // /users
+		helper.GetStructName(table1PluralName),             // Users
+		helper.GetStructName(brRelatedTables.Table2.Name))) // Tag
+
+	return buf.String()
 }

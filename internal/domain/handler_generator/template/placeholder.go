@@ -120,4 +120,7 @@ const (
 	PH_OTHER_ASSIGN_ORDER_TO_OPTION          = "%%OTHER-ASSIGN-ORDER-TO-OPTION%%"          // BR关系中对方表的排序条件赋值
 	PH_OTHER_FILTER_ASSIGN_TO_OPTION_GRPC    = "%%OTHER-FILTER-ASSIGN-TO-OPTION-GRPC%%"    // BR关系中对方表的gRPC筛选条件赋值
 	PH_OTHER_ASSIGN_ORDER_TO_OPTION_GRPC     = "%%OTHER-ASSIGN-ORDER-TO-OPTION-GRPC%%"     // BR关系中对方表的gRPC排序条件赋值
+
+	// BR table handler placeholders (for BR table's own handler file)
+	PH_BR_RELATION_HANDLER_METHODS = "%%BR-RELATION-HANDLER-METHODS%%"
 )
