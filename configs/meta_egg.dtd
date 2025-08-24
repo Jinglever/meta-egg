@@ -138,7 +138,9 @@ table: 外链的目标数据库表
 counter: 计数对应的表字段名
 ri_raw: 倒排索引key的原始字段名
 auto_remove: 当链接的目标record被删除时, 是否自动删除当前record，仅对RL表有效
-is_main: 对于RL表，标识此外键是否指向主表 (true|false)
+is_main: 标识此外键的重要性 (true|false)
+    - 对于RL表：标识此外键是否指向主表
+    - 对于BR表：标识此外键是否为核心关系外键（区别于辅助外键如创建者、更新者等）
 -->
 <!ELEMENT foreign_key EMPTY>
 <!ATTLIST foreign_key

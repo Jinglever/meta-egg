@@ -186,48 +186,50 @@ type BRRelatedTables struct {
 }
 
 // IdentifyBRRelatedTables 识别BR表连接的两个DATA表
-// BR表应该恰好有两个外键指向两个不同的DATA表
+// BR表必须恰好有两个标记为is_main=true的外键指向两个不同的DATA表
 func IdentifyBRRelatedTables(brTable *model.Table, tableNameToTable map[string]*model.Table) *BRRelatedTables {
 	result := &BRRelatedTables{
 		IsValid: false,
 	}
 
-	var dataForeignKeys []*model.Column
+	var mainMarkedForeignKeyColumns []*model.Column
 
-	// 收集所有指向DATA表的外键
+	// 收集所有标记为is_main=true且指向DATA表的外键列
 	for _, column := range brTable.Columns {
 		for _, fk := range column.ForeignKeys {
 			if targetTable := tableNameToTable[fk.Table]; targetTable != nil && targetTable.Type == model.TableType_DATA {
-				dataForeignKeys = append(dataForeignKeys, column)
+				if fk.IsMain {
+					mainMarkedForeignKeyColumns = append(mainMarkedForeignKeyColumns, column)
+				}
 				break // 一个列只能有一个外键，找到后跳出
 			}
 		}
 	}
 
-	// BR表必须恰好有两个指向DATA表的外键
-	if len(dataForeignKeys) != 2 {
-		log.Debugf("BR table (%s) has %d foreign keys to DATA tables, expected exactly 2", brTable.Name, len(dataForeignKeys))
+	// 必须恰好有两个标记为is_main=true的外键
+	if len(mainMarkedForeignKeyColumns) != 2 {
+		log.Debugf("BR table (%s) has %d foreign keys marked as is_main, expected exactly 2", brTable.Name, len(mainMarkedForeignKeyColumns))
 		return result
 	}
 
-	// 获取两个外键指向的表
-	fk1 := dataForeignKeys[0].ForeignKeys[0] // 第一个外键
-	fk2 := dataForeignKeys[1].ForeignKeys[0] // 第二个外键
+	// 获取两个核心外键指向的表
+	fk1 := mainMarkedForeignKeyColumns[0].ForeignKeys[0] // 第一个外键
+	fk2 := mainMarkedForeignKeyColumns[1].ForeignKeys[0] // 第二个外键
 
 	table1 := tableNameToTable[fk1.Table]
 	table2 := tableNameToTable[fk2.Table]
 
 	// 确保两个外键指向不同的表
 	if table1.Name == table2.Name {
-		log.Debugf("BR table (%s) has two foreign keys pointing to the same table (%s)", brTable.Name, table1.Name)
+		log.Debugf("BR table (%s) has two core foreign keys pointing to the same table (%s)", brTable.Name, table1.Name)
 		return result
 	}
 
 	// 设置结果
 	result.Table1 = table1
 	result.Table2 = table2
-	result.Table1FK = dataForeignKeys[0]
-	result.Table2FK = dataForeignKeys[1]
+	result.Table1FK = mainMarkedForeignKeyColumns[0]
+	result.Table2FK = mainMarkedForeignKeyColumns[1]
 	result.IsValid = true
 
 	return result
