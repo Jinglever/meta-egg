@@ -2196,15 +2196,15 @@ func generateTimeFieldAssignment(col *model.Column, sourcePrefix, targetField st
 
 	if isGRPC {
 		if !col.IsRequired {
-			return fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := jgstr.FormatTime(*%s); return &t }; return nil }(),",
-				targetField, sourceField, sourceField)
+			return fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := %s.Format(constraint.%s); return &t }; return nil }(),",
+				targetField, sourceField, sourceField, tFormat)
 		} else {
-			return fmt.Sprintf("\n\t\t\t%s: jgstr.FormatTime(%s),", targetField, sourceField)
+			return fmt.Sprintf("\n\t\t\t%s: %s.Format(constraint.%s),", targetField, sourceField, tFormat)
 		}
 	} else {
 		if !col.IsRequired {
-			// 对于nullable字段，先返回nil，后续需要特殊处理
-			return fmt.Sprintf("\n\t\t\t%s: nil, // TODO: 处理nullable时间字段的转换", targetField)
+			return fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := %s.Format(constraint.%s); return &t }; return nil }(),",
+				targetField, sourceField, sourceField, tFormat)
 		} else {
 			return fmt.Sprintf("\n\t\t\t%s: %s.Format(constraint.%s),", targetField, sourceField, tFormat)
 		}
@@ -2338,11 +2338,12 @@ func generateGRPCRLFieldAssignments(rlTable *model.Table, sourcePrefix string, o
 		sourceField := fmt.Sprintf("%s.%s", sourcePrefix, helper.GetTableColName(col.Name))
 
 		if isTimeColumn(col) {
+			tFormat := getTimeFormat(col.Type)
 			if !col.IsRequired {
-				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := jgstr.FormatTime(*%s); return &t }; return nil }(),",
-					targetField, sourceField, sourceField))
+				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := %s.Format(constraint.%s); return &t }; return nil }(),",
+					targetField, sourceField, sourceField, tFormat))
 			} else {
-				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: jgstr.FormatTime(%s),", targetField, sourceField))
+				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: %s.Format(constraint.%s),", targetField, sourceField, tFormat))
 			}
 		} else {
 			buf.WriteString(fmt.Sprintf("\n\t\t\t%s: %s,", targetField, sourceField))
@@ -2362,16 +2363,19 @@ func generateGRPCCreateBOAssignments(rlTable *model.Table, rlVarName string) str
 		}
 
 		if isTimeColumn(col) {
+			tFormat := getTimeFormat(col.Type)
 			if !col.IsRequired {
-				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *time.Time { if %sData.%s != nil { t := jgstr.ParseTime(*%sData.%s); return &t }; return nil }(),",
+				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *time.Time { if %sData.%s != nil { t, _ := time.ParseInLocation(constraint.%s, *%sData.%s, time.Local); return &t }; return nil }(),",
 					helper.GetTableColName(col.Name),
 					rlVarName,
 					helper.GetStructName(col.Name),
+					tFormat,
 					rlVarName,
 					helper.GetStructName(col.Name)))
 			} else {
-				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: jgstr.ParseTime(%sData.%s),",
+				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() time.Time { t, _ := time.ParseInLocation(constraint.%s, %sData.%s, time.Local); return t }(),",
 					helper.GetTableColName(col.Name),
+					tFormat,
 					rlVarName,
 					helper.GetStructName(col.Name)))
 			}
@@ -2402,14 +2406,17 @@ func generateGRPCRLHandlerFieldAssignments(rlTable *model.Table, rlTableVarName 
 			}
 
 			if isTimeColumn(col) {
+				tFormat := getTimeFormat(col.Type)
 				if !col.IsRequired {
-					buf.WriteString(fmt.Sprintf("\n\t\t%s: func() *time.Time { if req.%s != nil { t := jgstr.ParseTime(*req.%s); return &t }; return nil }(),",
+					buf.WriteString(fmt.Sprintf("\n\t\t%s: func() *time.Time { if req.%s != nil { t, _ := time.ParseInLocation(constraint.%s, *req.%s, time.Local); return &t }; return nil }(),",
 						helper.GetTableColName(col.Name),
 						helper.GetStructName(col.Name),
+						tFormat,
 						helper.GetStructName(col.Name)))
 				} else {
-					buf.WriteString(fmt.Sprintf("\n\t\t%s: jgstr.ParseTime(req.%s),",
+					buf.WriteString(fmt.Sprintf("\n\t\t%s: func() time.Time { t, _ := time.ParseInLocation(constraint.%s, req.%s, time.Local); return t }(),",
 						helper.GetTableColName(col.Name),
+						tFormat,
 						helper.GetStructName(col.Name)))
 				}
 			} else {
@@ -2422,12 +2429,13 @@ func generateGRPCRLHandlerFieldAssignments(rlTable *model.Table, rlTableVarName 
 			sourceField := fmt.Sprintf("%sBO.%s", rlTableVarName, helper.GetTableColName(col.Name))
 
 			if isTimeColumn(col) {
+				tFormat := getTimeFormat(col.Type)
 				if !col.IsRequired {
-					buf.WriteString(fmt.Sprintf("\n\t\t%s: func() *string { if %s != nil { t := jgstr.FormatTime(*%s); return &t }; return nil }(),",
-						targetField, sourceField, sourceField))
+					buf.WriteString(fmt.Sprintf("\n\t\t%s: func() *string { if %s != nil { t := %s.Format(constraint.%s); return &t }; return nil }(),",
+						targetField, sourceField, sourceField, tFormat))
 				} else {
-					buf.WriteString(fmt.Sprintf("\n\t\t%s: jgstr.FormatTime(%s),",
-						targetField, sourceField))
+					buf.WriteString(fmt.Sprintf("\n\t\t%s: %s.Format(constraint.%s),",
+						targetField, sourceField, tFormat))
 				}
 			} else {
 				buf.WriteString(fmt.Sprintf("\n\t\t%s: %s,", targetField, sourceField))
@@ -2437,12 +2445,13 @@ func generateGRPCRLHandlerFieldAssignments(rlTable *model.Table, rlTableVarName 
 			sourceField := fmt.Sprintf("%sBO.%s", rlTableVarName, helper.GetTableColName(col.Name))
 
 			if isTimeColumn(col) {
+				tFormat := getTimeFormat(col.Type)
 				if !col.IsRequired {
-					buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := jgstr.FormatTime(*%s); return &t }; return nil }(),",
-						targetField, sourceField, sourceField))
+					buf.WriteString(fmt.Sprintf("\n\t\t\t%s: func() *string { if %s != nil { t := %s.Format(constraint.%s); return &t }; return nil }(),",
+						targetField, sourceField, sourceField, tFormat))
 				} else {
-					buf.WriteString(fmt.Sprintf("\n\t\t\t%s: jgstr.FormatTime(%s),",
-						targetField, sourceField))
+					buf.WriteString(fmt.Sprintf("\n\t\t\t%s: %s.Format(constraint.%s),",
+						targetField, sourceField, tFormat))
 				}
 			} else {
 				buf.WriteString(fmt.Sprintf("\n\t\t\t%s: %s,", targetField, sourceField))
@@ -3368,17 +3377,23 @@ func generateBRHTTPFilterFields(table *model.Table) string {
 		fieldName := helper.GetStructName(col.Name)
 		formName := helper.GetVarName(col.Name)
 
-		// 根据字段类型生成不同的binding规则
-		var bindingRule string
-		if col.IsRequired {
-			bindingRule = fmt.Sprintf("required,max=%d", col.Length)
+		// 根据数据模型获取正确的Go类型
+		gotype := helper.GetGoTypeForHandler(col)
+		if !strings.HasPrefix(gotype, "*") && !helper.IsGoTypeNullable(gotype) {
+			gotype = "*" + gotype
+		}
+
+		// 获取binding规则
+		binding := helper.GetBinding(col)
+		if binding != "" {
+			binding = strings.ReplaceAll(binding, "required", "omitempty")
 		} else {
-			bindingRule = fmt.Sprintf("omitempty,max=%d", col.Length)
+			binding = " binding:\"omitempty\""
 		}
 
 		// 生成字段
-		buf.WriteString(fmt.Sprintf("\n\t%s *string `form:\"%s\" binding:\"%s\"` // %s",
-			fieldName, formName, bindingRule, col.Comment))
+		buf.WriteString(fmt.Sprintf("\n\t%s %s `form:\"%s\"%s` // %s",
+			fieldName, gotype, formName, binding, helper.GetCommentForHandler(col)))
 	}
 	return buf.String()
 }

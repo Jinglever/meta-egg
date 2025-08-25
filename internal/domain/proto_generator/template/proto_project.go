@@ -153,7 +153,7 @@ message %%RL-TABLE-NAME-STRUCT%%CreateData {
 message Add%%RL-TABLE-NAME-STRUCT%%Request {
     // %%MAIN-TABLE-COMMENT%%ID
     uint64 %%MAIN-TABLE-NAME-LOWER%%_id = 1 [(validate.rules).uint64 = {gte: 1}];
-%%COL-LIST-FOR-CREATE%%}
+%%COL-LIST-FOR-CREATE-ADD%%}
 
 // Remove%%RL-TABLE-NAME-STRUCT%%Request 删除%%RL-TABLE-COMMENT%%请求
 message Remove%%RL-TABLE-NAME-STRUCT%%Request {

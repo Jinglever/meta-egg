@@ -255,25 +255,23 @@ func generateBRTableQueryMessages(buf *strings.Builder, brTable *model.Table, br
 	buf.WriteString(fmt.Sprintf(`
 message Get%sListBy%sIDRequest {
   uint64 %s_id = 1; // %sID
-  uint32 page = 2; // 页码, 从1开始
-  uint32 page_size = 3; // 每页数量, 要求大于0
+  optional Pagination pagination = 2; // 分页请求（可选, 不传则不分页）
 %s%s}
 `, table2StructName, table1StructName, // message名
 		helper.GetVarName(brRelatedTables.Table1.Name), brRelatedTables.Table1.Comment, // 字段
-		generateBRProtoFilterFields(brRelatedTables.Table2, 4), // 筛选字段
-		generateBRProtoOrderFields(brRelatedTables.Table2, 4))) // 排序字段
+		generateBRProtoFilterFields(brRelatedTables.Table2, 3), // 筛选字段，从字段编号3开始
+		generateBRProtoOrderFields(brRelatedTables.Table2, 3))) // 排序字段，从字段编号3开始
 
 	// 生成Get{Table1}ListBy{Table2}ID请求message
 	buf.WriteString(fmt.Sprintf(`
 message Get%sListBy%sIDRequest {
   uint64 %s_id = 1; // %sID
-  uint32 page = 2; // 页码, 从1开始
-  uint32 page_size = 3; // 每页数量, 要求大于0
+  optional Pagination pagination = 2; // 分页请求（可选, 不传则不分页）
 %s%s}
 `, table1StructName, table2StructName, // message名
 		helper.GetVarName(brRelatedTables.Table2.Name), brRelatedTables.Table2.Comment, // 字段
-		generateBRProtoFilterFields(brRelatedTables.Table1, 4), // 筛选字段
-		generateBRProtoOrderFields(brRelatedTables.Table1, 4))) // 排序字段
+		generateBRProtoFilterFields(brRelatedTables.Table1, 3), // 筛选字段，从字段编号3开始
+		generateBRProtoOrderFields(brRelatedTables.Table1, 3))) // 排序字段，从字段编号3开始
 
 	// 响应message复用主表的定义，不需要在BR表proto文件中重复定义
 }
@@ -288,8 +286,13 @@ func generateBRProtoFilterFields(table *model.Table, startFieldNum int) string {
 			continue
 		}
 
+		colType, err := helper.GetProto3ValueType(col)
+		if err != nil {
+			log.Fatalf("fail to get to type: %v", err)
+		}
+		colType = "optional " + colType
 		fieldName := helper.GetVarName(col.Name)
-		buf.WriteString(fmt.Sprintf("  optional string %s = %d; // %s\n", fieldName, fieldNum, col.Comment))
+		buf.WriteString(fmt.Sprintf("  %s %s = %d; // %s\n", colType, fieldName, fieldNum, col.Comment))
 		fieldNum++
 	}
 
@@ -530,6 +533,42 @@ func genColListForCreate(code *string, table *model.Table) {
 		cnt++
 	}
 	*code = strings.ReplaceAll(*code, template.PH_COL_LIST_FOR_CREATE, buf.String())
+}
+
+func genColListForCreateAdd(code *string, table *model.Table) {
+	var (
+		buf     strings.Builder
+		colType string
+		err     error
+	)
+	cnt := 2 // 从字段编号2开始，因为字段编号1被主表ID占用
+	for _, col := range table.Columns {
+		if !col.IsAlterable {
+			continue
+		}
+		if col.IsHidden {
+			continue
+		}
+
+		colType, err = helper.GetProto3ValueType(col)
+		if err != nil {
+			log.Fatalf("fail to get to type: %v", err)
+		}
+		if !col.IsRequired {
+			colType = "optional " + colType
+		}
+		// comment
+		buf.WriteString(fmt.Sprintf("    // %s\n",
+			helper.GetCommentForHandler(col)))
+		buf.WriteString(fmt.Sprintf("    %s %s = %d%s;\n",
+			colType,
+			helper.GetDirName(col.Name),
+			cnt,
+			helper.GetProto3ValidateRule(col),
+		))
+		cnt++
+	}
+	*code = strings.ReplaceAll(*code, template.PH_COL_LIST_FOR_CREATE_ADD, buf.String())
 }
 
 func genHandlerMessage(code *string, project *model.Project, table *model.Table) {
@@ -823,6 +862,7 @@ func replaceTplForRLTable(code *string, rlTable *model.Table, mainTable *model.T
 	// 生成RL表的字段列表
 	genColListInVO(code, rlTable)
 	genColListForCreate(code, rlTable)
+	genColListForCreateAdd(code, rlTable)
 	genColListForList(code, rlTable)
 }
 
